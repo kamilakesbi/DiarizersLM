@@ -1,6 +1,8 @@
 import torch
 from asr_diarize import ASRDiarizationPipeline
 from datasets import load_dataset
+import diarizationlm 
+
 
 device = "cuda:2" if torch.cuda.is_available() else "cpu"
 pipeline = ASRDiarizationPipeline.from_pretrained("openai/whisper-tiny", device=device)
@@ -12,6 +14,6 @@ sample = next(iter(dataset))
 
 sample['audio']['array'] = sample['audio']['array'][:3*60*16000]
 
-out_text, out_labels = pipeline(sample["audio"])
+src_text, src_spk = pipeline(sample["audio"])
 
-print(out_text, out_labels)
+result = diarizationlm.create_diarized_text(src_text.split(' '), src_spk.split(' '))

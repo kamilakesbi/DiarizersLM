@@ -136,34 +136,38 @@ class ASRDiarizationPipeline:
         transcript_text = asr_out['text']
         word_timestamps = asr_out["chunks"]
 
-        # get the end timestamps for each chunk from the ASR output
-        word_level_preds = []
- 
+
+        # Assign each word to a speaker label: 
+        word_level_preds = [] 
         for word in word_timestamps: 
 
             start_timestamp, end_timestamp = word['timestamp']
 
+            # List of segments that overlap with the current word
             overlap_segments = [(i, segment) for i, segment in enumerate(new_segments) if segment['segment']['end'] > start_timestamp and segment['segment']['start'] < end_timestamp]
 
             if len(overlap_segments) > 0: 
-                # Associate associated with the speaker that has the biggest temporal overlap with this word
+                # Get segment which has highest overlap with current word
                 overlap = 0 
                 for element in overlap_segments: 
                     segment = element[1]
                     new_overlap = min(segment['segment']['end'], end_timestamp) - max(segment['segment']['start'], start_timestamp)
                     if new_overlap > overlap: 
                         index = element[0]
-                word_level_preds.append(new_segments[index]['speaker'])
+                # Get word speaker label: 
+                word_level_preds.append(new_segments[index]['speaker'][-1])
             else: 
-                # get current index: 
+                # If no overlap, associate with closest speaker
                 dist = new_segments[index]['segment']['end'] - start_timestamp
                 if index + 1 < len(new_segments): 
                     dist2 = new_segments[index + 1]['segment']['end'] - start_timestamp
                     if dist2 < dist: 
                         index = index + 1
-                word_level_preds.append(new_segments[index]['speaker'])
+                word_level_preds.append(new_segments[index]['speaker'][-1])
 
-        return transcript_text, word_level_preds
+        word_level_preds = ' '.join(word_level_preds)
+        
+        return transcript_text.strip(), word_level_preds
 
     # Adapted from transformers.pipelines.automatic_speech_recognition.AutomaticSpeechRecognitionPipeline.preprocess
     # (see https://github.com/huggingface/transformers/blob/238449414f88d94ded35e80459bb6412d8ab42cf/src/transformers/pipelines/automatic_speech_recognition.py#L417)
