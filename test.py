@@ -1,31 +1,33 @@
 import torch
 from asr_diarize import ASRDiarizationPipeline
 from datasets import load_dataset
+import torch
 from diarizationlm import utils
-import diarizationlm
 
-device = "cuda:2" if torch.cuda.is_available() else "cpu"
-pipeline = ASRDiarizationPipeline.from_pretrained("openai/whisper-tiny", device=device)
 
 # load dataset of concatenated LibriSpeech samples
 dataset = load_dataset("diarizers-community/ami",'ihm', split="train", streaming=True)
 # get first sample
 sample = next(iter(dataset))
 
-sample['audio']['array'] = sample['audio']['array'][:2*60*16000]
+sample['audio']['array'] = sample['audio']['array'][:3*60*16000]
 
-src_text, src_spk = pipeline(sample["audio"])
+device = "cuda:2" if torch.cuda.is_available() else "cpu"
 
-utt = {"utterance_id": "0",  "hyp_text": str(src_text) , "hyp_spk": src_spk}
+pipeline = ASRDiarizationPipeline.from_pretrained("openai/whisper-tiny", device=device)
 
-po = utils.PromptOptions()
+hyp_text, hyp_labels = pipeline.orchestrate(sample['audio'])
 
-prompts = diarizationlm.generate_prompts(utt, po)
+print('orchestrate : done')
+
+prompts = pipeline.generate_prompts(hyp_text, hyp_labels)
+
+print('prompts generated')
+
+completions = pipeline.generate_completions(prompts)
+
+final_output = pipeline.post_process(completions, hyp_text, hyp_labels)
 
 print(prompts)
 
-
-
-# result = diarizationlm.create_diarized_text(src_text.split(' '), src_spk.split(' '))
-
-
+print(final_output)
