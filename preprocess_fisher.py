@@ -19,7 +19,7 @@ def fisher_dataset_for_speaker_diarization(fpath = '/raid/kamilakesbi/fisher/dat
         txt_files += [os.path.join(dirpath, file) for file in filenames if file.endswith(".txt")]
 
     # now iterate over all transcriptions
-    for file_idx, file in tqdm(enumerate(txt_files)):
+    for file_idx, file in tqdm(enumerate(txt_files[:50])):
         # get the transcription filename without path (matches the corresponding ".sph" name)
         txt_filename = txt_filenames[file_idx].rstrip(".txt")
         
@@ -60,9 +60,8 @@ def fisher_dataset_for_speaker_diarization(fpath = '/raid/kamilakesbi/fisher/dat
                 "transcripts": transcripts, 
             }
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     
-    dataset = Dataset.from_generator(fisher_dataset_for_speaker_diarization, writer_batch_size=100)
+    dataset = Dataset.from_generator(fisher_dataset_for_speaker_diarization, writer_batch_size=200, cache_dir='/raid/kamilakesbi/')
     dataset = dataset.cast_column("audio", Audio())
-
     dataset.push_to_hub('kamilakesbi/fisher', private=True)

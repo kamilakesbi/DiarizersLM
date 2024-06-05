@@ -7,7 +7,6 @@ import json
 # import tensorflow as tf
 from diarizationlm import utils
 
-
 FLAGS = flags.FLAGS
 flags.DEFINE_string("input", "", "Comma-separated list of json files")
 flags.DEFINE_string("output", "/tmp/output", "Output file.")
@@ -72,17 +71,6 @@ def main(argv: Sequence[str]) -> None:
         po=po,
     )
 
-    # if FLAGS.output_type == "tfrecord":
-    #     with tf.io.TFRecordWriter(FLAGS.output) as writer:
-    #         for _, prompt, target in reader.generate_data_tuple():
-    #             example = tf.train.Example()
-    #             example.features.feature[
-    #                 FLAGS.input_feature_key
-    #             ].bytes_list.value.append(prompt.encode("utf-8"))
-    #             example.features.feature[
-    #                 FLAGS.output_feature_key
-    #             ].bytes_list.value.append(target.encode("utf-8"))
-    #             writer.write(example.SerializeToString())
     if FLAGS.output_type == "json":
         output_dict = {"utterances": []}
         for key, prompt, target in reader.generate_data_tuple():
@@ -93,13 +81,8 @@ def main(argv: Sequence[str]) -> None:
             output_dict["utterances"].append(segment)
         with open(FLAGS.output, "wt") as f:
             json.dump(output_dict, f, indent=2)
-    # elif FLAGS.output_type == "csv":
-    #     # For CSV header, we normally use "prompt,completion".
-    #     csv_lines = [FLAGS.input_feature_key + "," + FLAGS.output_feature_key]
-    #     for _, prompt, target in reader.generate_data_tuple():
-    #         csv_lines.append('"{}","{}"'.format(prompt, target))
-    #         with open(FLAGS.output, "wt") as f:
-    #             f.write("\n".join(csv_lines))
+
+
     elif FLAGS.output_type == "jsonl":
         json_lines = []
         for _, prompt, target in reader.generate_data_tuple():

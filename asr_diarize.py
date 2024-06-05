@@ -9,6 +9,7 @@ from transformers import pipeline
 from transformers.pipelines.audio_utils import ffmpeg_read
 from diarizationlm import utils
 import diarizationlm
+from transformers.utils import is_flash_attn_2_available, is_torch_sdpa_available
 
 
 class ASRDiarizationPipeline:
@@ -30,18 +31,19 @@ class ASRDiarizationPipeline:
         ]
         self.max_new_tokens = 4096
 
-
     @classmethod
     def from_pretrained(
         cls,
-        asr_model: Optional[str] = "openai/whisper-medium",
+        asr_model: Optional[str] = "distil-whisper/distil-large-v3",
         *,
         diarizer_model: Optional[str] = "pyannote/speaker-diarization-3.1",
         llm_model: Optional[str] = "meta-llama/Meta-Llama-3-8B",
         chunk_length_s: Optional[int] = 30,
         use_auth_token: Optional[Union[str, bool]] = True,
+        attn_implementation: Optional[str] = None, 
         **kwargs,
     ):
+
         asr_pipeline = pipeline(
             "automatic-speech-recognition",
             model=asr_model,
@@ -54,10 +56,11 @@ class ASRDiarizationPipeline:
         llm_model = pipeline(
             "text-generation",
             model="meta-llama/Meta-Llama-3-8B-Instruct",
-            model_kwargs={"torch_dtype": torch.bfloat16},
+            model_kwargs={"torch_dtype": torch.bfloat16, 'attn_implementation': attn_implementation},
             token=use_auth_token,
             **kwargs,
         )
+
 
         return cls(asr_pipeline, diarization_pipeline, llm_model)
 
@@ -170,7 +173,7 @@ class ASRDiarizationPipeline:
 
             if len(overlap_segments) > 0: 
                 # Get segment which has highest overlap with current word
-                overlap = 0 
+                overlap = 0
                 for element in overlap_segments: 
                     segment = element[1]
                     new_overlap = min(segment['segment']['end'], end_timestamp) - max(segment['segment']['start'], start_timestamp)
@@ -178,26 +181,25 @@ class ASRDiarizationPipeline:
                         index = element[0]
                 # Get word speaker label: 
                 word_level_preds.append(new_segments[index]['speaker'][-1])
-            else: 
+            else:
                 # If no overlap, associate with closest speaker
                 dist = new_segments[index]['segment']['end'] - start_timestamp
                 if index + 1 < len(new_segments): 
                     dist2 = new_segments[index + 1]['segment']['end'] - start_timestamp
-                    if dist2 < dist: 
+                    if dist2 < dist:
                         index = index + 1
                 word_level_preds.append(new_segments[index]['speaker'][-1])
 
         word_level_preds = ' '.join(word_level_preds)
 
         return transcript_text.strip(), word_level_preds
-        
 
     def generate_prompts(
         self, 
         text, 
         labels, 
     ): 
-
+        
         utterance = {"utterance_id": "0",  "hyp_text": str(text) , "hyp_spk": labels}
         prompts = diarizationlm.generate_prompts(utterance, self.prompts_options)
 
