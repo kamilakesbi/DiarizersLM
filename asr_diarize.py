@@ -50,12 +50,13 @@ class ASRDiarizationPipeline:
             **kwargs,
         )
         diarization_pipeline = Pipeline.from_pretrained(diarizer_model, use_auth_token=use_auth_token)
-
+        
         llm_model = pipeline(
             "text-generation",
             model="meta-llama/Meta-Llama-3-8B-Instruct",
             model_kwargs={"torch_dtype": torch.bfloat16},
             token=use_auth_token,
+            **kwargs,
         )
 
         return cls(asr_pipeline, diarization_pipeline, llm_model)
@@ -189,7 +190,6 @@ class ASRDiarizationPipeline:
         word_level_preds = ' '.join(word_level_preds)
 
         return transcript_text.strip(), word_level_preds
-
         
 
     def generate_prompts(
@@ -266,8 +266,6 @@ class ASRDiarizationPipeline:
         )
 
         return utils.create_diarized_text(hyp_text.split(' '), transferred_llm_labels.split(' '))
-    
-
 
     # Adapted from transformers.pipelines.automatic_speech_recognition.AutomaticSpeechRecognitionPipeline.preprocess
     # (see https://github.com/huggingface/transformers/blob/238449414f88d94ded35e80459bb6412d8ab42cf/src/transformers/pipelines/automatic_speech_recognition.py#L417)

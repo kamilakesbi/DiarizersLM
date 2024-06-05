@@ -10,9 +10,9 @@ dataset = load_dataset("diarizers-community/ami",'ihm', split="train", streaming
 # get first sample
 sample = next(iter(dataset))
 
-sample['audio']['array'] = sample['audio']['array'][:3*60*16000]
+sample['audio']['array'] = sample['audio']['array'][:90*16000]
 
-device = "cuda:2" if torch.cuda.is_available() else "cpu"
+device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
 pipeline = ASRDiarizationPipeline.from_pretrained("openai/whisper-tiny", device=device)
 

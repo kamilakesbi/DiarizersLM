@@ -1,5 +1,14 @@
 # DiarizersLM
 
+## Process Fisher dataset: 
+
+Download fisher dataset: 
+
+```
+
+```
+
+
 
 ## prepare_data: 
 
