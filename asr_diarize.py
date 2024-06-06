@@ -9,7 +9,6 @@ from transformers import pipeline
 from transformers.pipelines.audio_utils import ffmpeg_read
 from diarizationlm import utils
 import diarizationlm
-from transformers.utils import is_flash_attn_2_available, is_torch_sdpa_available
 
 
 class ASRDiarizationPipeline:
@@ -61,50 +60,33 @@ class ASRDiarizationPipeline:
             **kwargs,
         )
 
-
         return cls(asr_pipeline, diarization_pipeline, llm_model)
+    
+    def __call__( 
+            self,        
+            inputs: Union[np.ndarray, List[np.ndarray]],
+            **kwargs,
+        ): 
+
+        print('Diarize and Transcribe: ')
+        hyp_text, hyp_labels = self.orchestrate(inputs, **kwargs)
+
+        print('Generate prompts: ')
+        prompts = self.generate_prompts(hyp_text, hyp_labels)
+
+        print('Generate completions: ')
+        completions = self.generate_completions(prompts)
+        
+        print('Post process completions: ')
+        output = self.post_process(completions, hyp_text, hyp_labels)
+
+        return output
 
     def orchestrate(
         self,
         inputs: Union[np.ndarray, List[np.ndarray]],
         **kwargs,
     ):
-        """
-        Transcribe the audio sequence(s) given as inputs to text and label with speaker information. The input audio
-        is first passed to the speaker diarization pipeline, which returns timestamps for 'who spoke when'. The audio
-        is then passed to the ASR pipeline, which returns utterance-level transcriptions and their corresponding
-        timestamps. The speaker diarizer timestamps are aligned with the ASR transcription timestamps to give
-        speaker-labelled transcriptions. We cannot use the speaker diarization timestamps alone to partition the
-        transcriptions, as these timestamps may straddle across transcribed utterances from the ASR output. Thus, we
-        find the diarizer timestamps that are closest to the ASR timestamps and partition here.
-
-        Args:
-            inputs (`np.ndarray` or `bytes` or `str` or `dict`):
-                The inputs is either :
-                    - `str` that is the filename of the audio file, the file will be read at the correct sampling rate
-                      to get the waveform using *ffmpeg*. This requires *ffmpeg* to be installed on the system.
-                    - `bytes` it is supposed to be the content of an audio file and is interpreted by *ffmpeg* in the
-                      same way.
-                    - (`np.ndarray` of shape (n, ) of type `np.float32` or `np.float64`)
-                        Raw audio at the correct sampling rate (no further check will be done)
-                    - `dict` form can be used to pass raw audio sampled at arbitrary `sampling_rate` and let this
-                      pipeline do the resampling. The dict must be in the format `{"sampling_rate": int, "raw":
-                      np.array}` with optionally a `"stride": (left: int, right: int)` than can ask the pipeline to
-                      treat the first `left` samples and last `right` samples to be ignored in decoding (but used at
-                      inference to provide more context to the model). Only use `stride` with CTC models.
-            kwargs (remaining dictionary of keyword arguments, *optional*):
-                Can be used to update additional asr or diarization configuration parameters
-                        - To update the asr configuration, use the prefix *asr_* for each configuration parameter.
-                        - To update the diarization configuration, use the prefix *diarization_* for each configuration parameter.
-                        - Added this support related to issue #25: 08/25/2023
-                            
-        Return:
-            A list of transcriptions. Each list item corresponds to one chunk / segment of transcription, and is a
-            dictionary with the following keys:
-                - **text** (`str` ) -- The recognized text.
-                - **speaker** (`str`) -- The associated speaker.
-                - **timestamps** (`tuple`) -- The start and end time for the chunk / segment.
-        """
         kwargs_asr = {
             argument[len("asr_") :]: value for argument, value in kwargs.items() if argument.startswith("asr_")
         }
@@ -115,6 +97,7 @@ class ASRDiarizationPipeline:
         
         inputs, diarizer_inputs = self.preprocess(inputs)
 
+        print('Diarize: ')
         diarization = self.diarization_pipeline(
             {"waveform": diarizer_inputs, "sample_rate": self.sampling_rate},
             **kwargs_diarization,
@@ -152,47 +135,49 @@ class ASRDiarizationPipeline:
                 "speaker": prev_segment["label"],
             }
         )
-
+        
+        print('Transcribe: ')
         asr_out = self.asr_pipeline(
             {"array": inputs, "sampling_rate": self.sampling_rate},
-            return_timestamps="word",
+            return_timestamps=True, 
             **kwargs_asr,
         )
-        transcript_text = asr_out['text']
-        word_timestamps = asr_out["chunks"]
+        transcript_text = asr_out['text'].strip()
+        sentences_with_timestamps = asr_out["chunks"]
 
-
-        # Assign each word to a speaker label: 
-        word_level_preds = [] 
-        for word in word_timestamps: 
-
-            start_timestamp, end_timestamp = word['timestamp']
+        word_labels = []
+        for sentence_with_timestamps in sentences_with_timestamps: 
+            start_timestamp, end_timestamp = sentence_with_timestamps['timestamp']
+            sentence = sentence_with_timestamps['text']
 
             # List of segments that overlap with the current word
-            overlap_segments = [(i, segment) for i, segment in enumerate(new_segments) if segment['segment']['end'] > start_timestamp and segment['segment']['start'] < end_timestamp]
+            overlap_segments = [segment for segment in new_segments if segment['segment']['end'] >= start_timestamp and segment['segment']['start'] <= end_timestamp]
 
             if len(overlap_segments) > 0: 
                 # Get segment which has highest overlap with current word
-                overlap = 0
-                for element in overlap_segments: 
-                    segment = element[1]
-                    new_overlap = min(segment['segment']['end'], end_timestamp) - max(segment['segment']['start'], start_timestamp)
-                    if new_overlap > overlap: 
-                        index = element[0]
-                # Get word speaker label: 
-                word_level_preds.append(new_segments[index]['speaker'][-1])
-            else:
-                # If no overlap, associate with closest speaker
-                dist = new_segments[index]['segment']['end'] - start_timestamp
-                if index + 1 < len(new_segments): 
-                    dist2 = new_segments[index + 1]['segment']['end'] - start_timestamp
-                    if dist2 < dist:
-                        index = index + 1
-                word_level_preds.append(new_segments[index]['speaker'][-1])
+                max_overlap = 0
+                current_index=0
+                for index, segment in enumerate(overlap_segments):
+                    sentence_segment_overlap = min(segment['segment']['end'], end_timestamp) - max(segment['segment']['start'], start_timestamp)
+                    if sentence_segment_overlap >= max_overlap:
+                        current_index = index
+                        max_overlap = sentence_segment_overlap
+            # else:
+            #     # If no overlap, associate with closest speaker
+            #     dist = new_segments[index]['segment']['end'] - start_timestamp
+            #     if index + 1 < len(new_segments): 
+            #         dist2 = new_segments[index + 1]['segment']['end'] - start_timestamp
+            #         if dist2 < dist:
+            #             index = index + 1
 
-        word_level_preds = ' '.join(word_level_preds)
+            nb_words_in_sentence = len(sentence.strip().split(' '))
 
-        return transcript_text.strip(), word_level_preds
+            label = overlap_segments[current_index]['speaker'][-1]
+            word_labels +=[label]* nb_words_in_sentence
+
+        word_labels = ' '.join(word_labels)
+
+        return transcript_text, word_labels
 
     def generate_prompts(
         self, 
@@ -205,12 +190,10 @@ class ASRDiarizationPipeline:
 
         return prompts
 
-
     def generate_completions(
         self, 
         prompts
     ): 
-
         completions = []
         for prompt in prompts: 
 
