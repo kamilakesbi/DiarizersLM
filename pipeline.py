@@ -162,18 +162,27 @@ class ASRDiarizationPipeline:
                     if sentence_segment_overlap >= max_overlap:
                         current_index = index
                         max_overlap = sentence_segment_overlap
-            # else:
-            #     # If no overlap, associate with closest speaker
-            #     dist = new_segments[index]['segment']['end'] - start_timestamp
-            #     if index + 1 < len(new_segments): 
-            #         dist2 = new_segments[index + 1]['segment']['end'] - start_timestamp
-            #         if dist2 < dist:
-            #             index = index + 1
+                        
+                label = str(int(overlap_segments[current_index]['speaker'][-1]) + 1)
+
+            else:
+                # If no overlap, associate with closest speaker
+                gap_to_end = [float(new_segment['segment']['start'] - end_timestamp) for new_segment in new_segments]
+                gap_to_start = [float(new_segment['segment']['end'] - start_timestamp) for new_segment in new_segments]
+
+                gap_end_index = np.argmin(gap_to_end)
+                gap_start_index = np.argmin(gap_to_start)
+
+                if gap_to_end[gap_end_index] <= gap_to_start[gap_start_index]: 
+                    label = str(int(gap_to_end[gap_end_index]['speaker'][-1]) + 1)
+                else: 
+                    label = str(int(gap_to_start[gap_start_index]['speaker'][-1]) + 1)
 
             nb_words_in_sentence = len(sentence.strip().split(' '))
 
-            label = overlap_segments[current_index]['speaker'][-1]
-            word_labels +=[label]* nb_words_in_sentence
+            word_labels += [label]* nb_words_in_sentence
+
+        assert len(word_labels) == len(transcript_text.split(' '))
 
         word_labels = ' '.join(word_labels)
 
@@ -226,21 +235,21 @@ class ASRDiarizationPipeline:
     ): 
 
         completions_list = []
-        po = utils.PromptOptions()
+        
 
         for completion in completions: 
 
             completion = completion['content']
 
-            if po.completion_suffix and po.completion_suffix in completion:
+            if self.prompts_options.completion_suffix and self.prompts_options.completion_suffix in completion:
                 completion = utils.truncate_suffix_and_tailing_text(
-                    completion, po.completion_suffix
+                    completion, self.prompts_options.completion_suffix
                 )
             completions_list.append(completion)
         completions = " ".join(completions_list).strip()
 
         llm_text, llm_labels = utils.extract_text_and_spk(
-            completions, po=po
+            completions, po=self.prompts_options
         )
 
         transferred_llm_labels = utils.transcript_preserving_speaker_transfer(
