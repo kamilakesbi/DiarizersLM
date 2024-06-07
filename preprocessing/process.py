@@ -1,20 +1,17 @@
 from typing import Any
-from datasets import Dataset, Audio
+from datasets import Dataset
 import re 
-from transformers import WhisperTokenizer
 from diarizationlm import utils
+from orchestrator import OrchestratorPipeline
+import torch 
 
 class Preprocess: 
 
     def __init__(
         self, 
-        whisper_model = "distil-whisper/distil-large-v3", 
+        orchestrator, 
     ) -> None:
         
-        # Load the Whisper tokenizer
-        tokenizer = WhisperTokenizer.from_pretrained(whisper_model)
-        self.vocab = tokenizer.get_vocab()
-
         self.junk_tokens =  ["[noise]", "[laughter]", "[silence]", "[vocalized-noise]", "<a_aside>", "<b_aside>", "<e_aside>",
             "[laughter-", "_1", "[laugh]", "[sigh]", "[cough]", "[mn]", "[breath]", "[lipsmack]",
             "[sneeze]", "[skip]", "[pause]", "(%hesitation)", "(%HESITATION)"]
@@ -23,6 +20,8 @@ class Preprocess:
         self.fisher_fillers = r"\b(uh|uhm|um|hmm|mm|mhm|mmm)\b"
 
         self.prompt_options = utils.PromptOptions()
+
+        self.orchestrator = orchestrator
 
     def preprocess_text(self, text): 
 
@@ -82,19 +81,21 @@ class Preprocess:
 
         return text
     
-    def __call__(self, transcripts_column, speakers_column):
+    def __call__(self, transcripts_column, speakers_column, audio_column):
 
-        new_batch = {"ref_diarized_text": [], 'ref_text': [], 'ref_labels': []} 
+        new_batch = {"ref_diarized_text": [], 'ref_text': [], 'ref_labels': [], 'hyp_text': [], 'hyp_labels': []} 
 
-        # batch = [{key: values[i] for key, values in files.items()} for i in range(len(files["transcripts"]))]
 
         speaker_prefix = "<speaker:"
         speaker_suffix = '>'
         ref_diarized_text = ''
-        for i, speakers in enumerate(speakers_column): 
+        for i, audio in enumerate(speakers_column): 
+
+            hyp_text, hyp_labels = self.orchestrator(audio)
+            hyp_diarized_text = utils.create_diarized_text(hyp_text, hyp_labels)
             
             # Map speakers to integer values as required by diarizationlm: 
-            speaker_to_int = {speaker: str(idx + 1) for idx, speaker in enumerate(sorted(set(speakers)))}
+            speaker_to_int = {speaker: str(idx + 1) for idx, speaker in enumerate(sorted(set(speakers[i])))}
             speakers = [speaker_to_int[speaker] for speaker in speakers]
 
             transcriptions = transcripts_column[i]
@@ -110,6 +111,9 @@ class Preprocess:
             new_batch['ref_text'].append(ref_text)
             new_batch['ref_labels'].append(ref_labels)
 
+            new_batch['hyp_diarized_text'].append(hyp_diarized_text)
+            new_batch['hyp_text'].append(hyp_text)
+            new_batch['hyp_labels'].append(hyp_labels)
         return new_batch
 
 
@@ -117,18 +121,24 @@ if __name__ == '__main__':
 
     dataset = Dataset.from_file("/raid/kamilakesbi/generator/default-0af89f8814d3d2f4/0.0.0/generator-train-00000-of-00040.arrow")
 
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+    orchestrator = OrchestratorPipeline.from_pretrained(
+        asr_model = "openai/whisper-large-v3",
+        diarizer_model = "pyannote/speaker-diarization-3.1", 
+        device=device, 
+    )
     # Load the preprocessor: 
-    preprocessor = Preprocess()
+    preprocessor = Preprocess(orchestrator)
 
     dataset = dataset.map(
         preprocessor, 
-        input_columns=['transcripts', 'speakers'], 
+        input_columns=['transcripts', 'speakers', 'audio'], 
         batched=True, 
-        batch_size=32,
+        batch_size=2,
         remove_columns=['transcripts', 'speakers'],  
-        num_proc=12, 
-    ).cast_column('audio', Audio())
-
+        num_proc=1, 
+    )
     print(dataset)
 
 

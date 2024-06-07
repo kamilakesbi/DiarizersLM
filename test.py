@@ -1,5 +1,5 @@
 import torch
-from pipeline import ASRDiarizationPipeline
+from pipeline import DiarizersLmPipeline
 from datasets import load_dataset
 import torch
 from scipy.io.wavfile import write
@@ -15,7 +15,7 @@ audio = write( filename='example.wav', rate=16000, data=sample['audio']['array']
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-pipeline = ASRDiarizationPipeline.from_pretrained(
+pipeline = DiarizersLmPipeline.from_pretrained(
     asr_model = "openai/whisper-large-v3",
     diarizer_model = "pyannote/speaker-diarization-3.1", 
     llm_model = "meta-llama/Meta-Llama-3-8B",
