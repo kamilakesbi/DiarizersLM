@@ -22,6 +22,11 @@ class OrchestratorPipeline:
 
         self.prompts_options = utils.PromptOptions()
 
+    def to_device(self, device):
+
+        self.asr_pipeline = self.asr_pipeline.to(device)
+        self.diarization_pipeline.to(device)
+
     @classmethod
     def from_pretrained(
         cls,
@@ -41,6 +46,9 @@ class OrchestratorPipeline:
             **kwargs,
         )
         diarization_pipeline = Pipeline.from_pretrained(diarizer_model, use_auth_token=use_auth_token)
+
+        if 'device' in kwargs: 
+            diarization_pipeline.to(torch.device(kwargs['device']))
 
         return cls(asr_pipeline, diarization_pipeline)
     

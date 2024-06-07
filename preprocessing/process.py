@@ -4,6 +4,7 @@ import re
 from diarizationlm import utils
 from orchestrator import OrchestratorPipeline
 import torch 
+from multiprocess import set_start_method
 
 class Preprocess: 
 
@@ -18,6 +19,8 @@ class Preprocess:
         
         self.fisher_punctuations = ["{", "}", "[", "]-", "]", "((", "))", "(", ")", "."]
         self.fisher_fillers = r"\b(uh|uhm|um|hmm|mm|mhm|mmm)\b"
+
+        set_start_method('spawn')
 
         self.prompt_options = utils.PromptOptions()
 
@@ -81,21 +84,24 @@ class Preprocess:
 
         return text
     
-    def __call__(self, transcripts_column, speakers_column, audio_column):
+    def __call__(self, transcripts_column, speakers_column, audio_column, rank):
+
+        device = str(rank % torch.cuda.device_count())
 
         new_batch = {"ref_diarized_text": [], 'ref_text': [], 'ref_labels': [], 'hyp_text': [], 'hyp_labels': []} 
 
+        self.orchestrator = self.orchestrator.to(device)
 
         speaker_prefix = "<speaker:"
         speaker_suffix = '>'
         ref_diarized_text = ''
-        for i, audio in enumerate(speakers_column): 
+        for i, audio in enumerate(audio_column): 
 
             hyp_text, hyp_labels = self.orchestrator(audio)
             hyp_diarized_text = utils.create_diarized_text(hyp_text, hyp_labels)
             
             # Map speakers to integer values as required by diarizationlm: 
-            speaker_to_int = {speaker: str(idx + 1) for idx, speaker in enumerate(sorted(set(speakers[i])))}
+            speaker_to_int = {speaker: str(idx + 1) for idx, speaker in enumerate(sorted(set(speakers_column[i])))}
             speakers = [speaker_to_int[speaker] for speaker in speakers]
 
             transcriptions = transcripts_column[i]
@@ -120,13 +126,12 @@ class Preprocess:
 if __name__ == '__main__': 
 
     dataset = Dataset.from_file("/raid/kamilakesbi/generator/default-0af89f8814d3d2f4/0.0.0/generator-train-00000-of-00040.arrow")
-
-    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+    
+    device = "cuda:1" if torch.cuda.is_available() else "cpu"
 
     orchestrator = OrchestratorPipeline.from_pretrained(
         asr_model = "openai/whisper-large-v3",
         diarizer_model = "pyannote/speaker-diarization-3.1", 
-        device=device, 
     )
     # Load the preprocessor: 
     preprocessor = Preprocess(orchestrator)
@@ -135,10 +140,12 @@ if __name__ == '__main__':
         preprocessor, 
         input_columns=['transcripts', 'speakers', 'audio'], 
         batched=True, 
-        batch_size=2,
+        batch_size=1,
         remove_columns=['transcripts', 'speakers'],  
-        num_proc=1, 
+        with_rank=True, 
+        num_proc=4, 
     )
+
     print(dataset)
 
 
