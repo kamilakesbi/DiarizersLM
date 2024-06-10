@@ -30,6 +30,11 @@ python3 construct_fisher.py \
     --hub_folder=kamilakesbi/fisher
 ```
 
+#!/usr/bin/env bash
+
+
+
+
 ## prepare_data: 
 
 ```
@@ -44,3 +49,5 @@ python3 train_data_prep.py \
 --input_feature_key='prompt' \
 --output_feature_key='completion'
 ```
+
+

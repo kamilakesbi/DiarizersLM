@@ -9,10 +9,12 @@ from multiprocess import set_start_method
 class Preprocess: 
 
     def __init__(
-        self, 
-        orchestrator, 
+        self,
+        orchestrator,
     ) -> None:
         
+        set_start_method('spawn')
+
         self.junk_tokens =  ["[noise]", "[laughter]", "[silence]", "[vocalized-noise]", "<a_aside>", "<b_aside>", "<e_aside>",
             "[laughter-", "_1", "[laugh]", "[sigh]", "[cough]", "[mn]", "[breath]", "[lipsmack]",
             "[sneeze]", "[skip]", "[pause]", "(%hesitation)", "(%HESITATION)"]
@@ -20,9 +22,9 @@ class Preprocess:
         self.fisher_punctuations = ["{", "}", "[", "]-", "]", "((", "))", "(", ")", "."]
         self.fisher_fillers = r"\b(uh|uhm|um|hmm|mm|mhm|mmm)\b"
 
-        set_start_method('spawn')
-
         self.prompt_options = utils.PromptOptions()
+        self.speaker_prefix = self.prompt_options.speaker_prefix
+        self.speaker_suffix = self.prompt_options.speaker_suffix
 
         self.orchestrator = orchestrator
 
@@ -86,28 +88,26 @@ class Preprocess:
     
     def __call__(self, transcripts_column, speakers_column, audio_column, rank):
 
-        device = str(rank % torch.cuda.device_count())
+        device = "cuda:" + str(rank % torch.cuda.device_count())
+        new_batch = {"ref_diarized_text": [], 'ref_text': [], 'ref_labels': [], 'hyp_text': [], 'hyp_labels': [], 'hyp_diarized_text': []} 
 
-        new_batch = {"ref_diarized_text": [], 'ref_text': [], 'ref_labels': [], 'hyp_text': [], 'hyp_labels': []} 
+        self.orchestrator.to_device(device)
 
-        self.orchestrator = self.orchestrator.to(device)
-
-        speaker_prefix = "<speaker:"
-        speaker_suffix = '>'
         ref_diarized_text = ''
         for i, audio in enumerate(audio_column): 
-
+            
             hyp_text, hyp_labels = self.orchestrator(audio)
-            hyp_diarized_text = utils.create_diarized_text(hyp_text, hyp_labels)
+            
+            hyp_diarized_text = utils.create_diarized_text(hyp_text.split(' '), hyp_labels.split(' '))
             
             # Map speakers to integer values as required by diarizationlm: 
             speaker_to_int = {speaker: str(idx + 1) for idx, speaker in enumerate(sorted(set(speakers_column[i])))}
-            speakers = [speaker_to_int[speaker] for speaker in speakers]
+            speakers = [speaker_to_int[speaker] for speaker in speakers_column[i]]
 
             transcriptions = transcripts_column[i]
 
             for index, transcript in enumerate(transcriptions): 
-                ref_diarized_text += speaker_prefix + speakers[index] + speaker_suffix + ' '
+                ref_diarized_text += self.speaker_prefix + speakers[index] + self.speaker_suffix + ' '
                 ref_diarized_text += self.preprocess_text(transcript)
                 ref_diarized_text += ' '
 
@@ -120,6 +120,7 @@ class Preprocess:
             new_batch['hyp_diarized_text'].append(hyp_diarized_text)
             new_batch['hyp_text'].append(hyp_text)
             new_batch['hyp_labels'].append(hyp_labels)
+
         return new_batch
 
 
@@ -142,13 +143,11 @@ if __name__ == '__main__':
         batched=True, 
         batch_size=1,
         remove_columns=['transcripts', 'speakers'],  
-        with_rank=True, 
-        num_proc=4, 
+        with_rank=True,
+        num_proc=2,
     )
 
     print(dataset)
-
-
 
 
 

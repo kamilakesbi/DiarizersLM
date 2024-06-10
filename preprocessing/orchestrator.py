@@ -5,52 +5,53 @@ import requests
 import torch
 from pyannote.audio import Pipeline
 from torchaudio import functional as F
-from transformers import pipeline
 from transformers.pipelines.audio_utils import ffmpeg_read
 from diarizationlm import utils
-
+from transformers import WhisperProcessor, WhisperForConditionalGeneration
 
 class OrchestratorPipeline:
     def __init__(
         self,
-        asr_pipeline,
+        asr_processor,
+        asr_model, 
         diarization_pipeline,
     ):
-        self.asr_pipeline = asr_pipeline
-        self.sampling_rate = asr_pipeline.feature_extractor.sampling_rate
+        self.asr_processor = asr_processor
+        self.asr_model = asr_model
+        self.sampling_rate = asr_processor.feature_extractor.sampling_rate
         self.diarization_pipeline = diarization_pipeline
 
         self.prompts_options = utils.PromptOptions()
 
     def to_device(self, device):
 
-        self.asr_pipeline = self.asr_pipeline.to(device)
-        self.diarization_pipeline.to(device)
+        self.asr_model.to(torch.device(device))
+        self.asr_processor.to(torch.device(device))
+        self.diarization_pipeline.to(torch.device(device))
 
     @classmethod
     def from_pretrained(
         cls,
         asr_model: Optional[str] = "distil-whisper/distil-large-v3",
-        *,
         diarizer_model: Optional[str] = "pyannote/speaker-diarization-3.1",
-        chunk_length_s: Optional[int] = 30,
         use_auth_token: Optional[Union[str, bool]] = True,
         **kwargs,
     ):
+        
+        asr_processor = WhisperProcessor.from_pretrained(asr_model, token=use_auth_token, **kwargs)
 
-        asr_pipeline = pipeline(
-            "automatic-speech-recognition",
-            model=asr_model,
-            chunk_length_s=chunk_length_s,
-            token=use_auth_token,
-            **kwargs,
+        asr_model = WhisperForConditionalGeneration.from_pretrained(
+            asr_model, 
+            token=use_auth_token, 
         )
-        diarization_pipeline = Pipeline.from_pretrained(diarizer_model, use_auth_token=use_auth_token)
+        if 'device' in kwargs: 
+            asr_model.to(torch.device(kwargs['device']))
 
+        diarization_pipeline = Pipeline.from_pretrained(diarizer_model, use_auth_token=use_auth_token)
         if 'device' in kwargs: 
             diarization_pipeline.to(torch.device(kwargs['device']))
 
-        return cls(asr_pipeline, diarization_pipeline)
+        return cls(asr_processor, asr_model, diarization_pipeline)
     
     def __call__(
         self,
@@ -65,102 +66,128 @@ class OrchestratorPipeline:
             argument[len("diarization_") :]: value for argument, value in kwargs.items() if argument.startswith("diarization_")
         }
         
-        inputs, diarizer_inputs = self.preprocess(inputs)
+        if isinstance(inputs, List): 
+            asr_inputs = []
+            diarizer_inputs = []
+
+            for input in inputs: 
+                asr_input, diarizer_input = self.preprocess(input)   
+                asr_inputs.append(asr_input)
+                diarizer_inputs.append(diarizer_input)
+        else: 
+            asr_inputs, diarizer_inputs = self.preprocess(input)
+            asr_inputs, diarizer_inputs = list(asr_inputs), list(diarizer_inputs)
 
         print('Diarize: ')
-        diarization = self.diarization_pipeline(
-            {"waveform": diarizer_inputs, "sample_rate": self.sampling_rate},
-            **kwargs_diarization,
-        )
+        diarization_segments = []
+        for diarizer_input in diarizer_inputs: 
+            diarization = self.diarization_pipeline(
+                {"waveform": diarizer_input, "sample_rate": self.sampling_rate},
+                **kwargs_diarization,
+            )
 
-        segments = []
-        for segment, track, label in diarization.itertracks(yield_label=True):
-            segments.append({'segment': {'start': segment.start, 'end': segment.end},
-                             'track': track,
-                             'label': label})
+            segments = []
+            for segment, track, label in diarization.itertracks(yield_label=True):
+                segments.append({'segment': {'start': segment.start, 'end': segment.end},
+                                'track': track,
+                                'label': label})
 
-        # diarizer output may contain consecutive segments from the same speaker (e.g. {(0 -> 1, speaker_1), (1 -> 1.5, speaker_1), ...})
-        # we combine these segments to give overall timestamps for each speaker's turn (e.g. {(0 -> 1.5, speaker_1), ...})
-        new_segments = []
-        prev_segment = cur_segment = segments[0]
+            # diarizer output may contain consecutive segments from the same speaker (e.g. {(0 -> 1, speaker_1), (1 -> 1.5, speaker_1), ...})
+            # we combine these segments to give overall timestamps for each speaker's turn (e.g. {(0 -> 1.5, speaker_1), ...})
+            new_segments = []
+            prev_segment = cur_segment = segments[0]
 
-        for i in range(1, len(segments)):
-            cur_segment = segments[i]
+            for i in range(1, len(segments)):
+                cur_segment = segments[i]
 
-            # check if we have changed speaker ("label")
-            if cur_segment["label"] != prev_segment["label"] and i < len(segments):
-                # add the start/end times for the super-segment to the new list
-                new_segments.append(
-                    {
-                        "segment": {"start": prev_segment["segment"]["start"], "end": cur_segment["segment"]["start"]},
-                        "speaker": prev_segment["label"],
-                    }
-                )
-                prev_segment = segments[i]
+                # check if we have changed speaker ("label")
+                if cur_segment["label"] != prev_segment["label"] and i < len(segments):
+                    # add the start/end times for the super-segment to the new list
+                    new_segments.append(
+                        {
+                            "segment": {"start": prev_segment["segment"]["start"], "end": cur_segment["segment"]["start"]},
+                            "speaker": prev_segment["label"],
+                        }
+                    )
+                    prev_segment = segments[i]
 
-        # add the last segment(s) if there was no speaker change
-        new_segments.append(
-            {
-                "segment": {"start": prev_segment["segment"]["start"], "end": cur_segment["segment"]["end"]},
-                "speaker": prev_segment["label"],
-            }
-        )
+            # add the last segment(s) if there was no speaker change
+            new_segments.append(
+                {
+                    "segment": {"start": prev_segment["segment"]["start"], "end": cur_segment["segment"]["end"]},
+                    "speaker": prev_segment["label"],
+                }
+            )
+            diarization_segments.append(new_segments)
+
         
         print('Transcribe: ')
-        asr_out = self.asr_pipeline(
-            {"array": inputs, "sampling_rate": self.sampling_rate},
-            return_timestamps=True, 
-            **kwargs_asr,
-        )
-        transcript_text = asr_out['text'].strip()
-        sentences_with_timestamps = asr_out["chunks"]
+        processor_out = self.asr_processor(
+            asr_inputs, return_tensors='pt'
+        ).to(self.asr_model.device)
 
-        word_labels = []
-        for sentence_with_timestamps in sentences_with_timestamps: 
-            start_timestamp, end_timestamp = sentence_with_timestamps['timestamp']
-            sentence = sentence_with_timestamps['text']
+        asr_model_out = self.asr_model.generate(processor_out.input_features, return_timestamps=True)
 
-            # List of segments that overlap with the current word
-            overlap_segments = [segment for segment in new_segments if segment['segment']['end'] >= start_timestamp and segment['segment']['start'] <= end_timestamp]
+        asr_outputs = self.asr_processor.batch_decode(asr_model_out, output_offsets=True, skip_special_tokens=True)
 
-            if len(overlap_segments) > 0: 
-                # Get segment which has highest overlap with current word
-                max_overlap = 0
-                current_index=0
-                for index, segment in enumerate(overlap_segments):
-                    sentence_segment_overlap = min(segment['segment']['end'], end_timestamp) - max(segment['segment']['start'], start_timestamp)
-                    if sentence_segment_overlap >= max_overlap:
-                        current_index = index
-                        max_overlap = sentence_segment_overlap
-                        
-                label = str(int(overlap_segments[current_index]['speaker'][-1]) + 1)
+        batch_transcripts = []
+        batch_labels = []
+        for asr_output in asr_outputs: 
 
-            else:
-                # If no overlap, associate with closest speaker
-                gap_to_end = [float(new_segment['segment']['start'] - end_timestamp) for new_segment in new_segments]
-                gap_to_start = [float(new_segment['segment']['end'] - start_timestamp) for new_segment in new_segments]
+            transcript_text = asr_output['text'].strip()
+            sentences_with_timestamps = asr_output["offsets"]
 
-                gap_end_index = np.argmin(gap_to_end)
-                gap_start_index = np.argmin(gap_to_start)
+            word_labels = []
 
-                if gap_to_end[gap_end_index] <= gap_to_start[gap_start_index]: 
-                    label = str(int(gap_to_end[gap_end_index]['speaker'][-1]) + 1)
-                else: 
-                    label = str(int(gap_to_start[gap_start_index]['speaker'][-1]) + 1)
+            for sentence_with_timestamps in sentences_with_timestamps: 
+                start_timestamp, end_timestamp = sentence_with_timestamps['timestamp']
+                sentence = sentence_with_timestamps['text']
 
-            nb_words_in_sentence = len(sentence.strip().split(' '))
+                # List of segments that overlap with the current word
+                overlap_segments = [segment for segment in new_segments if segment['segment']['end'] >= start_timestamp and segment['segment']['start'] <= end_timestamp]
 
-            word_labels += [label]* nb_words_in_sentence
+                if len(overlap_segments) > 0: 
+                    # Get segment which has highest overlap with current word
+                    max_overlap = 0
+                    current_index=0
+                    for index, segment in enumerate(overlap_segments):
+                        sentence_segment_overlap = min(segment['segment']['end'], end_timestamp) - max(segment['segment']['start'], start_timestamp)
+                        if sentence_segment_overlap >= max_overlap:
+                            current_index = index
+                            max_overlap = sentence_segment_overlap
+                            
+                    label = str(int(overlap_segments[current_index]['speaker'][-1]) + 1)
 
-        assert len(word_labels) == len(transcript_text.split(' '))
+                else:
+                    # If no overlap, associate with closest speaker
+                    gap_to_end = [float(new_segment['segment']['start'] - end_timestamp) for new_segment in new_segments]
+                    gap_to_start = [float(new_segment['segment']['end'] - start_timestamp) for new_segment in new_segments]
 
-        word_labels = ' '.join(word_labels)
+                    gap_end_index = np.argmin(gap_to_end)
+                    gap_start_index = np.argmin(gap_to_start)
 
-        return transcript_text, word_labels
+                    if gap_to_end[gap_end_index] <= gap_to_start[gap_start_index]: 
+                        label = str(int(gap_to_end[gap_end_index]['speaker'][-1]) + 1)
+                    else: 
+                        label = str(int(gap_to_start[gap_start_index]['speaker'][-1]) + 1)
+
+                nb_words_in_sentence = len(sentence.strip().split(' '))
+
+                word_labels += [label]* nb_words_in_sentence
+
+            assert len(word_labels) == len(transcript_text.split(' '))
+
+            word_labels = ' '.join(word_labels)
+
+            batch_transcripts.append(transcript_text)
+            batch_labels.append(word_labels)
+            
+        return batch_transcripts, batch_labels
 
     # Adapted from transformers.pipelines.automatic_speech_recognition.AutomaticSpeechRecognitionPipeline.preprocess
     # (see https://github.com/huggingface/transformers/blob/238449414f88d94ded35e80459bb6412d8ab42cf/src/transformers/pipelines/automatic_speech_recognition.py#L417)
-    def preprocess(self, inputs):
+    def preprocess(self, inputs):            
+
         if isinstance(inputs, str):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file

@@ -51,6 +51,8 @@ class DiarizersLmPipeline:
             **kwargs,
         )
         diarization_pipeline = Pipeline.from_pretrained(diarizer_model, use_auth_token=use_auth_token)
+        if 'device' in kwargs: 
+            diarization_pipeline.to(torch.device(kwargs['device']))
         
         llm_model = pipeline(
             "text-generation",
@@ -97,7 +99,6 @@ class DiarizersLmPipeline:
         
         inputs, diarizer_inputs = self.preprocess(inputs)
 
-        print('Diarize: ')
         diarization = self.diarization_pipeline(
             {"waveform": diarizer_inputs, "sample_rate": self.sampling_rate},
             **kwargs_diarization,

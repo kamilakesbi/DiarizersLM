@@ -23,3 +23,5 @@ pipeline = DiarizersLmPipeline.from_pretrained(
 )
 
 output = pipeline(sample['audio'])
+
+print(pipeline)
