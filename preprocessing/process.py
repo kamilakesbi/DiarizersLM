@@ -53,7 +53,7 @@ class Preprocess:
         if len(split_str) > 1:
             text = " ".join(
                 [" ".join([" ".join(i.split(" ")[:-1]) for i in split_str])] + [split_str[-1].split(" ")[-1]])
-            
+          
         # Remove the trailing brackets on the start/end of words
         processed_str = []
         for word in text.split():
@@ -63,13 +63,13 @@ class Preprocess:
                 processed_str.append(word[:-1])
             else:
                 processed_str.append(word)
-
+        
         # Stick the processed words back together
         text = " ".join(processed_str)
 
         # Now we can remove all words in square brackets: -[go]ing to -ing
         text = re.sub(r"\-\[(.*?)\]", "-", text)
-
+        
         # westmin[ster]- to westmin-
         text = re.sub(r"\[(.*?)\]\-", "-", text)
 
@@ -93,20 +93,22 @@ class Preprocess:
 
         self.orchestrator.to_device(device)
 
+        hyp_text_list, hyp_labels_list = self.orchestrator(audio_column) 
+        
+        hyp_diarized_text_list = []
+        for i in range(len(hyp_text_list)): 
+            hyp_diarized_text_list.append(utils.create_diarized_text(hyp_text_list[i].split(' '), hyp_labels_list[i].split(' ')))
+
         ref_diarized_text = ''
-        for i, audio in enumerate(audio_column): 
+        for i, audio in enumerate(audio_column):
             
-            hyp_text, hyp_labels = self.orchestrator(audio)
-            
-            hyp_diarized_text = utils.create_diarized_text(hyp_text.split(' '), hyp_labels.split(' '))
-            
-            # Map speakers to integer values as required by diarizationlm: 
+            # Map speakers to integer values as required by diarizationlm:
             speaker_to_int = {speaker: str(idx + 1) for idx, speaker in enumerate(sorted(set(speakers_column[i])))}
             speakers = [speaker_to_int[speaker] for speaker in speakers_column[i]]
 
             transcriptions = transcripts_column[i]
 
-            for index, transcript in enumerate(transcriptions): 
+            for index, transcript in enumerate(transcriptions):
                 ref_diarized_text += self.speaker_prefix + speakers[index] + self.speaker_suffix + ' '
                 ref_diarized_text += self.preprocess_text(transcript)
                 ref_diarized_text += ' '
@@ -117,9 +119,9 @@ class Preprocess:
             new_batch['ref_text'].append(ref_text)
             new_batch['ref_labels'].append(ref_labels)
 
-            new_batch['hyp_diarized_text'].append(hyp_diarized_text)
-            new_batch['hyp_text'].append(hyp_text)
-            new_batch['hyp_labels'].append(hyp_labels)
+            new_batch['hyp_diarized_text'].append(hyp_diarized_text_list[i])
+            new_batch['hyp_text'].append(hyp_text_list[i])
+            new_batch['hyp_labels'].append(hyp_labels_list[i])
 
         return new_batch
 
@@ -141,7 +143,7 @@ if __name__ == '__main__':
         preprocessor, 
         input_columns=['transcripts', 'speakers', 'audio'], 
         batched=True, 
-        batch_size=1,
+        batch_size=8,
         remove_columns=['transcripts', 'speakers'],  
         with_rank=True,
         num_proc=2,

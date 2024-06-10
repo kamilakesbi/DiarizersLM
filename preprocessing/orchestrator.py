@@ -26,7 +26,6 @@ class OrchestratorPipeline:
     def to_device(self, device):
 
         self.asr_model.to(torch.device(device))
-        self.asr_processor.to(torch.device(device))
         self.diarization_pipeline.to(torch.device(device))
 
     @classmethod
@@ -126,7 +125,7 @@ class OrchestratorPipeline:
             asr_inputs, return_tensors='pt'
         ).to(self.asr_model.device)
 
-        asr_model_out = self.asr_model.generate(processor_out.input_features, return_timestamps=True)
+        asr_model_out = self.asr_model.generate(processor_out.input_features, return_timestamps=True, **kwargs_asr)
 
         asr_outputs = self.asr_processor.batch_decode(asr_model_out, output_offsets=True, skip_special_tokens=True)
 
