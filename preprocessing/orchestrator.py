@@ -8,6 +8,7 @@ from torchaudio import functional as F
 from transformers.pipelines.audio_utils import ffmpeg_read
 from diarizationlm import utils
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
+from transformers.utils import is_flash_attn_2_available, is_torch_sdpa_available
 
 class OrchestratorPipeline:
     def __init__(
@@ -38,10 +39,12 @@ class OrchestratorPipeline:
     ):
         
         asr_processor = WhisperProcessor.from_pretrained(asr_model, token=use_auth_token, **kwargs)
+        attn_implementation = "sdpa" if is_torch_sdpa_available() else "eager"
 
         asr_model = WhisperForConditionalGeneration.from_pretrained(
             asr_model, 
             token=use_auth_token, 
+            attn_implementation=attn_implementation, 
         )
         if 'device' in kwargs: 
             asr_model.to(torch.device(kwargs['device']))
@@ -129,6 +132,7 @@ class OrchestratorPipeline:
 
         asr_outputs = self.asr_processor.batch_decode(asr_model_out, output_offsets=True, skip_special_tokens=True)
 
+        print('Orchestrate: ')
         batch_transcripts = []
         batch_labels = []
         for asr_output in asr_outputs: 
@@ -166,9 +170,9 @@ class OrchestratorPipeline:
                     gap_start_index = np.argmin(gap_to_start)
 
                     if gap_to_end[gap_end_index] <= gap_to_start[gap_start_index]: 
-                        label = str(int(gap_to_end[gap_end_index]['speaker'][-1]) + 1)
+                        label = str(int(new_segments[gap_end_index]['speaker'][-1]) + 1)
                     else: 
-                        label = str(int(gap_to_start[gap_start_index]['speaker'][-1]) + 1)
+                        label = str(int(new_segments[gap_start_index]['speaker'][-1]) + 1)
 
                 nb_words_in_sentence = len(sentence.strip().split(' '))
 
