@@ -158,7 +158,7 @@ class OrchestratorPipeline:
                     label = str(int(overlap_segments[current_index]['speaker'][-1]) + 1)
 
                 else:
-                    # If no overlap, associate with closest speaker
+                    # If no overlap, associate with closest speaker:
                     gap_to_end = [float(new_segment['segment']['start'] - end_timestamp) for new_segment in new_segments]
                     gap_to_start = [float(new_segment['segment']['end'] - start_timestamp) for new_segment in new_segments]
 

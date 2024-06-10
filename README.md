@@ -2,7 +2,7 @@
 
 # Fisher preprocessing: 
 
-## Process Fisher dataset: 
+## Construct Fisher dataset: 
 
 Download fisher dataset: 
 
@@ -32,7 +32,11 @@ python3 construct_fisher.py \
 
 #!/usr/bin/env bash
 
+## Process Fisher dataset: 
 
+```
+python3 preprocessing/process.py
+```
 
 
 ## prepare_data: 
