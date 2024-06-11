@@ -1,12 +1,12 @@
 import os
 import torchaudio
-from datasets import Dataset, Audio
 from tqdm import tqdm
 import argparse
 from huggingface_hub import snapshot_download
+from datasets import Dataset, Audio
 
 
-def fisher_dataset_for_speaker_diarization(fpath, nb_files): 
+def fisher_dataset_for_speaker_diarization(fpath="/data/fisher/data"): 
 
     txt_files = list()
     txt_filenames = list()
@@ -22,7 +22,7 @@ def fisher_dataset_for_speaker_diarization(fpath, nb_files):
         txt_files += [os.path.join(dirpath, file) for file in filenames if file.endswith(".txt")]
 
     # now iterate over all transcriptions
-    for file_idx, file in tqdm(enumerate(txt_files[:nb_files])):
+    for file_idx, file in tqdm(enumerate(txt_files)):
         # get the transcription filename without path (matches the corresponding ".sph" name)
         txt_filename = txt_filenames[file_idx].rstrip(".txt")
         
@@ -70,24 +70,21 @@ if __name__ == "__main__":
 
     # Add arguments
     parser.add_argument('--download', default = False)
-    parser.add_argument('--local_fisher_dir', default= "/raid/kamilakesbi/fisher")
+    parser.add_argument('--local_fisher_dir', default= "/data/fisher/data")
 
     parser.add_argument('--preprocess', default=False)
-    parser.add_argument('--nb_files', default=8000)
-    parser.add_argument('--preprocess_cache_dir', default='/raid/kamilakesbi/')
-    parser.add_argument('--hub_folder', default='kamilakesbi/fisher')
+    parser.add_argument('--preprocess_cache_dir', default='/data/fisher')
+    parser.add_argument('--hub_folder', default='kamilakesbi/fisher_full')
     
     args = parser.parse_args()
 
-    if args.download is True: 
-
+    if args.download: 
         snapshot_download(repo_id="speech-seq2seq/fisher", repo_type="dataset", local_dir=args.local_fisher_dir)
-
-    if args.preprocess is True: 
-
+    
+    if args.preprocess: 
         dataset = Dataset.from_generator(
-            lambda x : fisher_dataset_for_speaker_diarization(x, fpath= os.path.join(args.local_fisher_dir,'/data'), nb_files=int(args.nb_files)), 
-            writer_batch_size=200, 
+            fisher_dataset_for_speaker_diarization, 
+            writer_batch_size=200,
             cache_dir=args.preprocess_cache_dir, 
         )
         dataset = dataset.cast_column("audio", Audio())

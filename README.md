@@ -9,14 +9,14 @@ Download fisher dataset:
 ```
 python3 construct_fisher.py \
     --download \
-    --local_fisher_dir="/raid/kamilakesbi/fisher" \
+    --local_fisher_dir="/data/fisher" \
 ```
 
 Decompress the downloaded files: 
 
 ```
-tar -xvf fisher_part_1.tar
-tar -xvf fisher_part_2.tar
+tar -xvf fisher_part_1.tar.gz
+tar -xvf fisher_part_2.tar.gz
 ```
 
 Preprocess the dataset and push to hub: 
@@ -24,10 +24,9 @@ Preprocess the dataset and push to hub:
 ```
 python3 construct_fisher.py \
     --preprocess \
-    --nb_files=8000 \
-    --local_fisher_dir=/raid/kamilakesbi/fisher \
-    --preprocess_cache_dir=/raid/kamilakesbi/ \
-    --hub_folder=kamilakesbi/fisher
+    --local_fisher_dir=/data/fisher/data \
+    --preprocess_cache_dir=/data/fisher \
+    --hub_folder=kamilakesbi/fisher_full
 ```
 
 #!/usr/bin/env bash
