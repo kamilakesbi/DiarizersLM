@@ -13,7 +13,6 @@ from torch.utils.data import DataLoader
 from typing import Any, Dict, List, Union
 from dataclasses import dataclass
 
-
 class Preprocess: 
 
     def __init__(
@@ -104,39 +103,41 @@ class DataCollatorWithPadding:
         batch['timestamps_end'] = [f['timestamps_end'] for f in features]
         batch['speakers'] = [f['speakers'] for f in features]
         batch['transcripts'] = [f['transcripts'] for f in features] 
-        whisper_inputs = {'inputs_features': [f['whisper_inputs']['input_features'] for f in features]}
 
-        # reformat list to dict and set to pytorch format
-        batch['whisper_inputs'] = self.processor.feature_extractor.pad(
-            whisper_inputs,
-            padding='longest',
-            return_tensors="pt",
+        samples = [example[audio_column_name]["array"] for example in features]
+
+        in_sampling_rate = features[0]['audio']['sampling_rate']
+
+        if in_sampling_rate != whisper_sampling_rate:
+            samples = [F.resample(torch.from_numpy(np.array(input)), in_sampling_rate, whisper_sampling_rate).numpy() for input in samples] 
+
+        batch['whisper_inputs'] = feature_extractor(
+            samples,
+            sampling_rate=whisper_sampling_rate,
+            truncation=False,
+            padding=True,
+            return_attention_mask=True,
         )
 
-        batch['pyannote_inputs'] = [f['pyannote_inputs'] for f in features]
+        # batch['pyannote_inputs'] = [torch.from_numpy(f['pyannote_inputs']).float().unsqueeze(0) for f in features]
+        
         return batch
 
-def prepare_dataset(batch):
-    # process audio
-    sample = batch['audio']
-
-    inputs = sample.pop("array", None)
-    in_sampling_rate = sample.pop("sampling_rate", None)
-
-    if in_sampling_rate != whisper_sampling_rate:
-        inputs = F.resample(torch.from_numpy(np.array(inputs)), in_sampling_rate, whisper_sampling_rate).numpy()
-    
-    # Whisper inputs: 
-    whisper_inputs = feature_extractor(inputs, sampling_rate=whisper_sampling_rate, truncation=False)
-    batch['whisper_inputs'] = whisper_inputs
-
-    # Diarization inputs: 
-    diarizer_inputs = torch.from_numpy(inputs).float()
-    diarizer_inputs = diarizer_inputs.unsqueeze(0)
-
-    batch['pyannote_inputs'] = diarizer_inputs
-
-    return batch
+# def prepare_dataset(batch):
+#     # process audio
+#     sample = batch['audio']
+#     inputs = sample.pop("array", None)
+#     in_sampling_rate = sample.pop("sampling_rate", None)
+#     if in_sampling_rate != whisper_sampling_rate:
+#         inputs = F.resample(torch.from_numpy(np.array(inputs)), in_sampling_rate, whisper_sampling_rate).numpy()
+#     # Whisper inputs:
+#     whisper_inputs = feature_extractor(inputs, sampling_rate=whisper_sampling_rate, truncation=False)
+#     batch['whisper_inputs'] = whisper_inputs.get('input_features')[0]
+#     # Diarization inputs: 
+#     diarizer_inputs = torch.from_numpy(inputs).float()
+#     diarizer_inputs = diarizer_inputs.unsqueeze(0)
+#     batch['pyannote_inputs'] = diarizer_inputs
+#     return batch
 
 
 if __name__ == '__main__': 
@@ -160,8 +161,8 @@ if __name__ == '__main__':
     asr_model = "distil-whisper/distil-large-v3"
     diarizer_model = "pyannote/speaker-diarization-3.1"
 
-    asr_processor = WhisperProcessor.from_pretrained(asr_model, token=True)
-    feature_extractor = WhisperFeatureExtractor.from_pretrained(asr_model, token=True)
+    asr_processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3", token=True)
+    feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-large-v3", token=True)
     attn_implementation = "sdpa" if is_torch_sdpa_available() else "eager"
 
     asr_model = WhisperForConditionalGeneration.from_pretrained(
@@ -187,14 +188,8 @@ if __name__ == '__main__':
                 num_proc=None,
             )
         else: 
-            raw_dataset = Dataset.from_file("/data/fisher/generator/default-f61137895945b655/0.0.0/generator-train-00013-of-00059.arrow").select(range(8))
+            raw_dataset = Dataset.from_file("/data/fisher/generator/default-f61137895945b655/0.0.0/generator-train-00013-of-00059.arrow").select(range(4))
 
-
-    with accelerator.main_process_first(): 
-        vectorized_dataset = raw_dataset.map(
-            prepare_dataset, 
-            remove_columns=['audio'],            
-        )
 
     data_collator = DataCollatorWithPadding(
         processor=asr_processor,
@@ -202,7 +197,7 @@ if __name__ == '__main__':
     )
 
     dataloader = DataLoader(
-            vectorized_dataset,
+            raw_dataset,
             batch_size=per_device_eval_batch_size,
             collate_fn=data_collator,
             num_workers=dataloader_num_workers,
@@ -210,7 +205,7 @@ if __name__ == '__main__':
         )
 
     for step, batch in enumerate(dataloader):
-
+        
         print(batch)
         break
 
