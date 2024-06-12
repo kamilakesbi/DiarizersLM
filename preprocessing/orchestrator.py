@@ -8,7 +8,7 @@ from torchaudio import functional as F
 from transformers.pipelines.audio_utils import ffmpeg_read
 from diarizationlm import utils
 from transformers import WhisperProcessor, WhisperForConditionalGeneration
-from transformers.utils import is_flash_attn_2_available, is_torch_sdpa_available
+from transformers.utils import is_torch_sdpa_available
 
 class OrchestratorPipeline:
     def __init__(
@@ -121,7 +121,6 @@ class OrchestratorPipeline:
                 }
             )
             diarization_segments.append(new_segments)
-
         
         print('Transcribe: ')
         processor_out = self.asr_processor(

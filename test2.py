@@ -4,7 +4,7 @@ from datasets import Dataset
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 
-dataset = Dataset.from_file("/raid/kamilakesbi/generator/default-0af89f8814d3d2f4/0.0.0/generator-train-00000-of-00040.arrow")
+dataset = Dataset.from_file("/data/fisher/generator/default-f61137895945b655/0.0.0/generator-train-00013-of-00059.arrow")
 
 samples = dataset[:4]['audio']
 

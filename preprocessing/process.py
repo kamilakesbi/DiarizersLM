@@ -31,10 +31,9 @@ class Preprocess:
 
         return text
     
-    def __call__(self, transcripts_column, speakers_column, audio_column):
+    def __call__(self, transcripts_column, speakers_column, audio_column, rank):
 
-        # device = "cuda:" + str(rank % torch.cuda.device_count())
-        device = 'cuda:0'
+        device = "cuda:" + str(rank % torch.cuda.device_count())
         new_batch = {"ref_diarized_text": [], 'ref_text': [], 'ref_labels': [], 'hyp_text': [], 'hyp_labels': [], 'hyp_diarized_text': []} 
 
         self.orchestrator.to_device(device)
@@ -72,9 +71,8 @@ class Preprocess:
 
 if __name__ == '__main__': 
 
-    dataset = Dataset.from_file("/raid/kamilakesbi/generator/default-0af89f8814d3d2f4/0.0.0/generator-train-00000-of-00040.arrow")
+    dataset = Dataset.from_file("/data/fisher/generator/default-f61137895945b655/0.0.0/generator-train-00013-of-00059.arrow")
     
-    device = "cuda:1" if torch.cuda.is_available() else "cpu"
 
     orchestrator = OrchestratorPipeline.from_pretrained(
         asr_model = "distil-whisper/distil-large-v3",
@@ -86,14 +84,16 @@ if __name__ == '__main__':
     # Load the preprocessor: 
     preprocessor = Preprocess(orchestrator, normalizer)
 
+
+
     dataset = dataset.map(
         preprocessor, 
         input_columns=['transcripts', 'speakers', 'audio'], 
         batched=True, 
-        batch_size=2,
+        batch_size=4,
         remove_columns=['transcripts', 'speakers'],  
-        with_rank=False,
-        num_proc=1,
+        with_rank=True,
+        num_proc=20,
     )
 
     print(dataset)

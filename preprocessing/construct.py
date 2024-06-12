@@ -82,10 +82,12 @@ if __name__ == "__main__":
         snapshot_download(repo_id="speech-seq2seq/fisher", repo_type="dataset", local_dir=args.local_fisher_dir)
     
     if args.preprocess: 
+        print('ok')
         dataset = Dataset.from_generator(
             fisher_dataset_for_speaker_diarization, 
             writer_batch_size=200,
             cache_dir=args.preprocess_cache_dir, 
         )
         dataset = dataset.cast_column("audio", Audio())
+        print('ok')
         dataset.push_to_hub(args.hub_folder, private=True)
