@@ -4,13 +4,15 @@ import torch
 from transformers import WhisperProcessor, WhisperForConditionalGeneration, WhisperTokenizer
 from pyannote.audio import Pipeline
 
-from accelerate import Accelerator
+from accelerate import Accelerator, InitProcessGroupKwargs
 from torch.utils.data import DataLoader
 from utils import add_batch_to_dataset, DataCollatorAudio, DataCollatorLabels
 from processor import Processor
 from tqdm import tqdm 
 import logging 
 import time
+from datetime import timedelta
+
 from dataclasses import dataclass, field
 from transformers import HfArgumentParser
 from typing import Optional
@@ -28,6 +30,11 @@ class ModelArguments:
         metadata={"help": "Path to pretrained Pyannote model or model identifier from huggingface.co/models"}
     )
 
+    normalizer_name_or_path: Optional[str] = field(
+        default = None, 
+        metadata={"help": "Path to pretrained noramlizer model or model identifier from huggingface.co/models"}
+    )
+
     attn_implementation: Optional[str] = field(
             default=None,
             metadata={
@@ -39,6 +46,15 @@ class ModelArguments:
                 )
             },
         )
+    dtype: Optional[str] = field(
+        default="float32",
+        metadata={
+            "help": (
+                "The data type (dtype) in which to load the model weights. One of `float32` (full-precision), "
+                "`float16` or `bfloat16` (both half-precision)."
+            )
+        },
+    )
 
     
 @dataclass
@@ -89,7 +105,7 @@ class DataArguments:
     )
 
     output_hub_repository: str= field(
-
+        default=None,
         metadata={"help": "Hub repository"},
     )
 
@@ -108,11 +124,11 @@ if __name__ == '__main__':
     model_args, data_args = parser.parse_args_into_dataclasses()
 
     # Dataset Processing Hyperparameters : 
-    dataset_name = str(data_args.per_device_eval_batch_size)
+    dataset_name = str(data_args.dataset_name)
     dataset_split_name = str(data_args.dataset_split_name)
-    per_device_batch_size = int(data_args.per_device_eval_batch_size)
+    per_device_batch_size = int(data_args.per_device_batch_size)
     dataloader_num_workers = int(data_args.dataloader_num_workers)
-    num_proc = int(data_args.num_proc)
+    num_proc = int(data_args.num_proc) if data_args.num_proc is not None else None
     streaming = str(data_args.streaming)
 
     logger.debug('Per device batch size: {}'.format(per_device_batch_size))
@@ -123,9 +139,25 @@ if __name__ == '__main__':
     # Load the different models: 
     asr_model_name = str(model_args.asr_name_or_path)
     diarizer_model_name = str(model_args.diarizer_name_or_path)
-    normalizer_name = str(model_args.normalizer_name_or_path)
+    normalizer_name = str(model_args.normalizer_name_or_path) if model_args.normalizer_name_or_path else asr_model_name
 
-    accelerator = Accelerator()
+    if model_args.dtype == "float16":
+        mixed_precision = "fp16"
+        torch_dtype = torch.float16
+    elif model_args.dtype == "bfloat16":
+        mixed_precision = "bf16"
+        torch_dtype = torch.bfloat16
+    else:
+        mixed_precision = "no"
+        torch_dtype = torch.float32
+
+    kwargs = InitProcessGroupKwargs(timeout=timedelta(seconds=7200))
+
+    accelerator = Accelerator(
+        mixed_precision=mixed_precision,
+        kwargs_handlers=[kwargs],
+     
+    )
     device = accelerator.device
 
     # Load prompt options: 
@@ -137,6 +169,8 @@ if __name__ == '__main__':
     asr_model = WhisperForConditionalGeneration.from_pretrained(
         asr_model_name, 
         token=True, 
+        low_cpu_mem_usage=True,
+        torch_dtype=torch_dtype,
         attn_implementation=str(model_args.attn_implementation), 
     )
 
@@ -177,6 +211,8 @@ if __name__ == '__main__':
                 num_proc=num_proc,
             )
 
+    accelerator.wait_for_everyone()
+
     label_dataset = raw_dataset.select_columns(['timestamps_start', 'timestamps_end', 'speakers', 'transcripts'])
     audio_dataset = raw_dataset.select_columns(['audio'])
 
@@ -212,16 +248,20 @@ if __name__ == '__main__':
 
     logger.debug('Entering dataloder loop: ')
 
+
     start_time = time.perf_counter()
     for step, (audio_batch, labels_batch) in tqdm(enumerate(zip(audio_dataloader,labels_dataloader))):
         
+
         logger.debug('Data loading time: {}'.format(time.perf_counter() - start_time))
 
         # Diarization: 
         start_time = time.perf_counter()
+
         diarizer_inputs = audio_batch['pyannote_inputs']
         diarization_segments = processor.get_diarization_segments(diarizer_inputs)
         logger.debug('Diarization time: {}'.format(time.perf_counter() - start_time))
+
 
         # Transcription: 
         start_time = time.perf_counter()
@@ -234,6 +274,7 @@ if __name__ == '__main__':
 
         # Orchestration: 
         start_time = time.perf_counter()
+
 
         hyp_text_batch, hyp_labels_batch, hyp_diarized_text_batch = processor.orchestrate(transcriptions, diarization_segments)
         ref_text_batch, ref_labels_batch, ref_diarized_text_batch = processor.get_references(labels_batch['transcripts'], labels_batch['speakers'])
@@ -254,8 +295,9 @@ if __name__ == '__main__':
         accelerator.wait_for_everyone()
 
 
-    if str(data_args.push_to_hub): 
-        processed_dataset.push_to_hub(str(data_args.output_hub_repository), private=True)
+    if accelerator.is_main_process:
+        if str(data_args.push_to_hub): 
+            processed_dataset.push_to_hub(str(data_args.output_hub_repository), private=True)
 
 
 

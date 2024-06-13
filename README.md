@@ -29,12 +29,25 @@ python3 construct_fisher.py \
     --hub_folder=kamilakesbi/fisher_full
 ```
 
-#!/usr/bin/env bash
 
 ## Process Fisher dataset: 
 
 ```
-python3 preprocessing/process.py
+python3 preprocessing/run.py \
+    --asr_name_or_path "distil-whisper/distil-large-v3" \
+    --diarizer_name_or_path "pyannote/speaker-diarization-3.1" \
+    --attn_implementation 'sdpa' \
+    --dtype 'bfloat16' \
+    --dataset_name 'kamilakesbi/fisher_medium' \
+    --dataset_split_name 'train' \
+    --per_device_batch_size 4 \
+    --dataloader_num_workers 4 \
+    --dtype "bfloat16" \
+    --streaming \
+    --per_device_batch_size 2 \
+    --dataloader_num_workers 8 \
+    --push_to_hub \
+    --output_hub_repository "kamilakesbi/processed_fisher" 
 ```
 
 
