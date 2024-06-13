@@ -1,8 +1,7 @@
-from datasets import load_dataset, IterableDatasetDict, Dataset
+from datasets import load_dataset, IterableDatasetDict, Dataset, concatenate_datasets
 from diarizationlm import utils
 import torch 
-from multiprocess import set_start_method
-from transformers import WhisperProcessor, WhisperForConditionalGeneration, WhisperFeatureExtractor
+from transformers import WhisperProcessor, WhisperForConditionalGeneration, WhisperFeatureExtractor, WhisperTokenizer
 from pyannote.audio import Pipeline
 
 from transformers.utils import is_torch_sdpa_available 
@@ -13,66 +12,147 @@ from torch.utils.data import DataLoader
 from typing import Any, Dict, List, Union
 from dataclasses import dataclass
 
-class Preprocess: 
 
-    def __init__(
-        self,
-        orchestrator,
-        normalizer, 
-    ) -> None:
-        
-        set_start_method('spawn')
+def get_diarization_segments(diarizer_inputs, diarization_pipeline): 
 
-        self.prompt_options = utils.PromptOptions()
-        self.speaker_prefix = self.prompt_options.speaker_prefix
-        self.speaker_suffix = self.prompt_options.speaker_suffix
+    diarization_segments = []
 
-        self.orchestrator = orchestrator
-        self.normalizer = normalizer
+    for diarizer_input in diarizer_inputs: 
 
-    def normalize_text(self, text): 
+        diarization = diarization_pipeline(
+            {"waveform": diarizer_input, "sample_rate": whisper_sampling_rate},
+        )
 
-        text = self.normalizer.normalize(text)
+        segments = []
+        for segment, track, label in diarization.itertracks(yield_label=True):
+            segments.append({'segment': {'start': segment.start, 'end': segment.end},
+                            'track': track,
+                            'label': label})
 
-        return text
+        # diarizer output may contain consecutive segments from the same speaker (e.g. {(0 -> 1, speaker_1), (1 -> 1.5, speaker_1), ...})
+        # we combine these segments to give overall timestamps for each speaker's turn (e.g. {(0 -> 1.5, speaker_1), ...})
+        new_segments = []
+        prev_segment = cur_segment = segments[0]
+
+        for i in range(1, len(segments)):
+            cur_segment = segments[i]
+
+            # check if we have changed speaker ("label")
+            if cur_segment["label"] != prev_segment["label"] and i < len(segments):
+                # add the start/end times for the super-segment to the new list
+                new_segments.append(
+                    {
+                        "segment": {"start": prev_segment["segment"]["start"], "end": cur_segment["segment"]["start"]},
+                        "speaker": prev_segment["label"],
+                    }
+                )
+                prev_segment = segments[i]
+
+        # add the last segment(s) if there was no speaker change
+        new_segments.append(
+            {
+                "segment": {"start": prev_segment["segment"]["start"], "end": cur_segment["segment"]["end"]},
+                "speaker": prev_segment["label"],
+            }
+        )
+        diarization_segments.append(new_segments)
+
+    return diarization_segments
+
+def transcript(whisper_inputs): 
+
+    asr_model_out = asr_model.generate(**whisper_inputs, return_timestamps=True)
+    transcripts = asr_processor.batch_decode(asr_model_out, output_offsets=True, skip_special_tokens=True)
+
+    return transcripts
+
+
+def orchestrate(transcriptions, diarization_segments): 
+
+    transcripts_batch = []
+    labels_batch = []
+    diarized_transcript_batch = []
+
+    for i, asr_output in enumerate(transcriptions): 
+
+        transcript_text = asr_output['text'].strip()
+        sentences_with_timestamps = asr_output["offsets"]
+        diarization_segment = diarization_segments[i]
+        word_labels = []
+
+        for sentence_with_timestamps in sentences_with_timestamps: 
+            start_timestamp, end_timestamp = sentence_with_timestamps['timestamp']
+            sentence = sentence_with_timestamps['text']
+
+            # List of segments that overlap with the current word
+            overlap_segments = [segment for segment in diarization_segment if segment['segment']['end'] >= start_timestamp and segment['segment']['start'] <= end_timestamp]
+
+            if len(overlap_segments) > 0: 
+                # Get segment which has highest overlap with current word
+                max_overlap = 0
+                current_index=0
+                for index, segment in enumerate(overlap_segments):
+                    sentence_segment_overlap = min(segment['segment']['end'], end_timestamp) - max(segment['segment']['start'], start_timestamp)
+                    if sentence_segment_overlap >= max_overlap:
+                        current_index = index
+                        max_overlap = sentence_segment_overlap
+                        
+                label = str(int(overlap_segments[current_index]['speaker'][-1]) + 1)
+
+            else:
+                # If no overlap, associate with closest speaker:
+                gap_to_end = [float(new_segment['segment']['start'] - end_timestamp) for new_segment in diarization_segment]
+                gap_to_start = [float(new_segment['segment']['end'] - start_timestamp) for new_segment in diarization_segment]
+
+                gap_end_index = np.argmin(gap_to_end)
+                gap_start_index = np.argmin(gap_to_start)
+
+                if gap_to_end[gap_end_index] <= gap_to_start[gap_start_index]: 
+                    label = str(int(diarization_segment[gap_end_index]['speaker'][-1]) + 1)
+                else: 
+                    label = str(int(diarization_segment[gap_start_index]['speaker'][-1]) + 1)
+
+            nb_words_in_sentence = len(sentence.strip().split(' '))
+
+            word_labels += [label]* nb_words_in_sentence
+
+        assert len(word_labels) == len(transcript_text.split(' '))
+
+        word_labels = ' '.join(word_labels)
+
+        transcripts_batch.append(transcript_text)
+        labels_batch.append(word_labels)
+
+    for i in range(len(transcripts_batch)): 
+        diarized_transcript_batch.append(utils.create_diarized_text(transcripts_batch[i].split(' '), transcripts_batch[i].split(' ')))
+
+    return transcripts_batch, labels_batch, diarized_transcript_batch
+
+def get_references(ref_transcriptions, ref_speakers): 
     
-    def __call__(self, transcripts_column, speakers_column, audio_column, rank):
+    ref_texts_batch = []
+    ref_labels_batch = []
+    ref_diarized_texts_batch = []
 
-        device = "cuda:" + str(rank % torch.cuda.device_count())
-        new_batch = {"ref_diarized_text": [], 'ref_text': [], 'ref_labels': [], 'hyp_text': [], 'hyp_labels': [], 'hyp_diarized_text': []} 
-
-        self.orchestrator.to_device(device)
-
-        hyp_text_list, hyp_labels_list = self.orchestrator(audio_column) 
+    for i, transcriptions in enumerate(ref_transcriptions):
         
-        hyp_diarized_text_list = []
-        for i in range(len(hyp_text_list)): 
-            hyp_diarized_text_list.append(utils.create_diarized_text(hyp_text_list[i].split(' '), hyp_labels_list[i].split(' ')))
+        # Map speakers to integer values as required by diarizationlm:
+        speaker_to_int = {speaker: str(idx + 1) for idx, speaker in enumerate(sorted(set(ref_speakers[i])))}
+        speakers = [speaker_to_int[speaker] for speaker in ref_speakers[i]]
 
         ref_diarized_text = ''
-        for i, transcriptions in enumerate(transcripts_column):
-            
-            # Map speakers to integer values as required by diarizationlm:
-            speaker_to_int = {speaker: str(idx + 1) for idx, speaker in enumerate(sorted(set(speakers_column[i])))}
-            speakers = [speaker_to_int[speaker] for speaker in speakers_column[i]]
+        for index, transcript in enumerate(transcriptions):
+            ref_diarized_text += speaker_prefix + speakers[index] + speaker_suffix + ' '
+            ref_diarized_text += normalizer.normalize(transcript)
+            ref_diarized_text += ' '
 
-            for index, transcript in enumerate(transcriptions):
-                ref_diarized_text += self.speaker_prefix + speakers[index] + self.speaker_suffix + ' '
-                ref_diarized_text += self.normalize_text(transcript)
-                ref_diarized_text += ' '
+        ref_text, ref_labels = utils.extract_text_and_spk(ref_diarized_text, po=prompts_options)
 
-            ref_text, ref_labels = utils.extract_text_and_spk(ref_diarized_text, po=self.prompt_options)
+        ref_texts_batch.append(ref_text)
+        ref_labels_batch.append(ref_labels)
+        ref_diarized_texts_batch.append(ref_diarized_text)
 
-            new_batch['ref_diarized_text'].append(ref_diarized_text)
-            new_batch['ref_text'].append(ref_text)
-            new_batch['ref_labels'].append(ref_labels)
-
-            new_batch['hyp_diarized_text'].append(hyp_diarized_text_list[i])
-            new_batch['hyp_text'].append(hyp_text_list[i])
-            new_batch['hyp_labels'].append(hyp_labels_list[i])
-
-        return new_batch
-
+    return ref_texts_batch, ref_labels_batch, ref_diarized_texts_batch
 
 @dataclass
 class DataCollatorWithPadding:
@@ -117,27 +197,33 @@ class DataCollatorWithPadding:
             truncation=False,
             padding=True,
             return_attention_mask=True,
+            return_tensors="pt",
         )
 
-        # batch['pyannote_inputs'] = [torch.from_numpy(f['pyannote_inputs']).float().unsqueeze(0) for f in features]
+        batch['pyannote_inputs'] = [torch.from_numpy(sample).float().unsqueeze(0) for sample in samples]
         
         return batch
 
-# def prepare_dataset(batch):
-#     # process audio
-#     sample = batch['audio']
-#     inputs = sample.pop("array", None)
-#     in_sampling_rate = sample.pop("sampling_rate", None)
-#     if in_sampling_rate != whisper_sampling_rate:
-#         inputs = F.resample(torch.from_numpy(np.array(inputs)), in_sampling_rate, whisper_sampling_rate).numpy()
-#     # Whisper inputs:
-#     whisper_inputs = feature_extractor(inputs, sampling_rate=whisper_sampling_rate, truncation=False)
-#     batch['whisper_inputs'] = whisper_inputs.get('input_features')[0]
-#     # Diarization inputs: 
-#     diarizer_inputs = torch.from_numpy(inputs).float()
-#     diarizer_inputs = diarizer_inputs.unsqueeze(0)
-#     batch['pyannote_inputs'] = diarizer_inputs
-#     return batch
+def add_batch_to_dataset(
+    processed_dataset, 
+    ref_diarized_text_batch, 
+    ref_text_batch, 
+    ref_labels_batch, 
+    hyp_text_batch, 
+    hyp_labels_batch, 
+): 
+    
+    for i in range(len(ref_diarized_text_batch)): 
+        dataset_row = {"ref_diarized_text": [], "ref_text": [], "ref_labels": [], "hyp_text": [], "hyp_labels": [], "hyp_diarized_text": []}
+        dataset_row['ref_diarized_text'].append(ref_diarized_text_batch[i])
+        dataset_row['ref_text'].append(ref_text_batch[i])
+        dataset_row['ref_labels'].append(ref_labels_batch[i])
+        dataset_row['hyp_text'].append(hyp_text_batch[i])
+        dataset_row['hyp_labels'].append(hyp_labels_batch[i])
+        dataset_row['hyp_diarized_text'].append(hyp_diarized_text_batch[i])
+        processed_dataset = processed_dataset.add_item(dataset_row)
+
+    return processed_dataset
 
 
 if __name__ == '__main__': 
@@ -161,8 +247,8 @@ if __name__ == '__main__':
     asr_model = "distil-whisper/distil-large-v3"
     diarizer_model = "pyannote/speaker-diarization-3.1"
 
-    asr_processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3", token=True)
-    feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-large-v3", token=True)
+    asr_processor = WhisperProcessor.from_pretrained(asr_model, token=True)
+    feature_extractor = WhisperFeatureExtractor.from_pretrained(asr_model, token=True)
     attn_implementation = "sdpa" if is_torch_sdpa_available() else "eager"
 
     asr_model = WhisperForConditionalGeneration.from_pretrained(
@@ -171,9 +257,11 @@ if __name__ == '__main__':
         attn_implementation=attn_implementation, 
     )
 
+    normalizer = WhisperTokenizer.from_pretrained("distil-whisper/distil-large-v3")
+
     whisper_sampling_rate = asr_processor.feature_extractor.sampling_rate
 
-    diarization_pipeline = Pipeline.from_pretrained(diarizer_model)
+    diarization_pipeline = Pipeline.from_pretrained(diarizer_model).to(torch.device(device))
    
     asr_model, diarization_pipeline = accelerator.prepare(asr_model, diarization_pipeline)
 
@@ -204,45 +292,35 @@ if __name__ == '__main__':
             pin_memory=True,
         )
 
+    processed_dataset = Dataset.from_dict({"ref_diarized_text": [], "ref_text": [], "ref_labels": [], "hyp_text": [], "ref_labels": []})
+
     for step, batch in enumerate(dataloader):
         
-        print(batch)
-        break
-
-
+        diarizer_inputs = batch['pyannote_inputs']
         
-        # Generate predictions and pad to max generated length
-        # generate_fn = model.module.generate if accelerator.num_processes > 1 else model.generate
-        # generated_ids = generate_fn(batch["input_features"].to(dtype=torch_dtype), **gen_kwargs)
-        # generated_ids = accelerator.pad_across_processes(generated_ids, dim=1, pad_index=tokenizer.pad_token_id)
+        diarization_segments = get_diarization_segments(diarizer_inputs, diarization_pipeline)
 
-        # Gather all predictions and targets
-    # dataloader = accelerator.prepare(dataloader)
+        whisper_inputs = batch['whisper_inputs']
+        whisper_inputs.input_features = whisper_inputs.to(device)
 
-    # batches = tqdm(dataloader, disable=not accelerator.is_local_main_process)
+        transcriptions = transcript(whisper_inputs)
+        
+        hyp_text_batch, hyp_labels_batch, hyp_diarized_text_batch = orchestrate(transcriptions, diarization_segments)
+        ref_text_batch, ref_labels_batch, ref_diarized_text_batch = get_references(batch['transcripts'], batch['speakers'])
 
-    # for step, batch in enumerate(dataloader):
+        processed_dataset = add_batch_to_dataset(
+            processed_dataset, 
+            ref_diarized_text_batch, 
+            ref_text_batch, 
+            ref_labels_batch, 
+            hyp_text_batch, 
+            hyp_labels_batch
+        )
 
-    #     print(batch)
-    #     break
+        print('ok')
+        
 
 
-    # normalizer = WhisperTokenizer.from_pretrained("distil-whisper/distil-large-v3")
-
-    # # Load the preprocessor: 
-    # preprocessor = Preprocess(orchestrator, normalizer)
-
-    # dataset = dataset.map(
-    #     preprocessor, 
-    #     input_columns=['transcripts', 'speakers', 'audio'], 
-    #     batched=True, 
-    #     batch_size=4,
-    #     remove_columns=['transcripts', 'speakers'],  
-    #     with_rank=True,
-    #     num_proc=20,
-    # )
-
-    # print(dataset)
 
 
 
