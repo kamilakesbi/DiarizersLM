@@ -72,7 +72,7 @@ class DataCollatorWithPadding:
         if in_sampling_rate != self.sampling_rate:
             samples = [F.resample(torch.from_numpy(np.array(input)), in_sampling_rate, self.sampling_rate).numpy() for input in samples] 
 
-        batch['whisper_inputs'] = self.feature_extractor(
+        batch['whisper_inputs'] = self.processor(
             samples,
             sampling_rate=self.sampling_rate,
             truncation=False,
