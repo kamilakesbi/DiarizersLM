@@ -317,7 +317,8 @@ if __name__ == '__main__':
             hyp_labels_batch
         )
 
-        print('ok')
+        print( 'ok')
+
         
 
 
