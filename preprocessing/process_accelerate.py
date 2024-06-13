@@ -233,7 +233,7 @@ if __name__ == '__main__':
     dataloader_num_workers = 1
 
     audio_column_name = "audio"
-    streaming = False
+    streaming = True
 
     accelerator = Accelerator()
     device = 'cuda:0'
@@ -272,6 +272,7 @@ if __name__ == '__main__':
         if streaming: 
             raw_dataset = load_dataset(
                 'kamilakesbi/fisher_medium', 
+                split='train', 
                 streaming=True, 
                 num_proc=None,
             )
@@ -317,9 +318,6 @@ if __name__ == '__main__':
             hyp_labels_batch
         )
 
-        print( 'ok')
-
-        
 
 
 
