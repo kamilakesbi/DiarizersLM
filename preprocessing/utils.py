@@ -31,8 +31,9 @@ def add_batch_to_dataset(
 
 
 
+
 @dataclass
-class DataCollatorWithPadding:
+class DataCollatorAudio:
     """
     Data collator that will dynamically pad the inputs received.
     Args:
@@ -60,10 +61,10 @@ class DataCollatorWithPadding:
 
         batch = {}
 
-        batch['timestamps_start'] = [f['timestamps_start'] for f in features]
-        batch['timestamps_end'] = [f['timestamps_end'] for f in features]
-        batch['speakers'] = [f['speakers'] for f in features]
-        batch['transcripts'] = [f['transcripts'] for f in features] 
+        # batch['timestamps_start'] = [f['timestamps_start'] for f in features]
+        # batch['timestamps_end'] = [f['timestamps_end'] for f in features]
+        # batch['speakers'] = [f['speakers'] for f in features]
+        # batch['transcripts'] = [f['transcripts'] for f in features] 
 
         samples = [example['audio']["array"] for example in features]
 
@@ -84,3 +85,27 @@ class DataCollatorWithPadding:
         batch['pyannote_inputs'] = [torch.from_numpy(sample).float().unsqueeze(0) for sample in samples]
         
         return batch
+
+
+
+@dataclass
+class DataCollatorLabels:
+    """
+    """
+
+    def __call__(self, 
+        features: List[Dict[str, Union[List[int], np.ndarray]]], 
+    ) -> Dict[str, np.ndarray]:
+
+
+        batch = {}
+
+        batch['timestamps_start'] = [f['timestamps_start'] for f in features]
+        batch['timestamps_end'] = [f['timestamps_end'] for f in features]
+        batch['speakers'] = [f['speakers'] for f in features]
+        batch['transcripts'] = [f['transcripts'] for f in features]
+        
+        return batch
+
+
+

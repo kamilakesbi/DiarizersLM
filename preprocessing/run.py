@@ -7,7 +7,7 @@ from pyannote.audio import Pipeline
 from transformers.utils import is_torch_sdpa_available 
 from accelerate import Accelerator
 from torch.utils.data import DataLoader
-from utils import add_batch_to_dataset, DataCollatorWithPadding
+from utils import add_batch_to_dataset, DataCollatorAudio, DataCollatorLabels
 from processor import Processor
 from tqdm import tqdm 
 import logging 
@@ -28,8 +28,8 @@ if __name__ == '__main__':
     # Hyperparameters: 
     dataset_name = 'kamilakesbi/fisher_medium'
     split = "train"
-    dataloader_batch_size = 4
-    dataloader_num_workers = 1
+    dataloader_batch_size = 16
+    dataloader_num_workers = 8
     preprocessing_num_workers = 24
     streaming = True
 
@@ -76,51 +76,69 @@ if __name__ == '__main__':
     with accelerator.main_process_first(): 
         if streaming: 
             raw_dataset = load_dataset(
-                'kamilakesbi/fisher_medium', 
+                dataset_name, 
                 split='train', 
                 streaming=True, 
                 num_proc=None,
             )
         else: 
             raw_dataset = load_dataset(
-                'kamilakesbi/fisher_medium', 
+                dataset_name, 
                 split='train', 
                 streaming=False, 
                 num_proc=preprocessing_num_workers,
             )
 
-    data_collator = DataCollatorWithPadding(
+    label_dataset = raw_dataset.select_columns(['timestamps_start', 'timestamps_end', 'speakers', 'transcripts'])
+    audio_dataset = raw_dataset.select_columns(['audio'])
+
+    # Define Data Collators: 
+    audio_data_collator = DataCollatorAudio(
         processor=asr_processor,
         padding="longest",
         sampling_rate=sample_rate
     )
 
-    dataloader = DataLoader(
-            raw_dataset,
+    labels_data_collator = DataCollatorLabels()
+
+    # Define Data Loaders: 
+    audio_dataloader = DataLoader(
+            audio_dataset,
             batch_size=dataloader_batch_size,
-            collate_fn=data_collator,
+            collate_fn=audio_data_collator,
             num_workers=dataloader_num_workers,
             pin_memory=True,
         )
+    
+    labels_dataloader = DataLoader(
+        label_dataset,
+        batch_size=dataloader_batch_size * accelerator.num_processes,
+        collate_fn=labels_data_collator,
+        num_workers=dataloader_num_workers,
+    )
 
-    # dataloader = accelerator.prepare(dataloader)
+    audio_dataloader = accelerator.prepare(audio_dataloader)
+    audio_batches = tqdm(audio_dataloader, disable=not accelerator.is_local_main_process)
 
     processed_dataset = Dataset.from_dict({"ref_diarized_text": [], "ref_text": [], "ref_labels": [], "hyp_text": [], "ref_labels": []})
 
     print('Entering dataloder loop: ')
-    for step, batch in tqdm(enumerate(dataloader)):
+
+    start_time = time.perf_counter()
+    for step, (audio_batch, labels_batch) in tqdm(enumerate(zip(audio_dataloader,labels_dataloader))):
         
+        logger.debug('Data loading time: {}'.format(time.perf_counter() - start_time))
+
         # Diarization: 
         start_time = time.perf_counter()
-        diarizer_inputs = batch['pyannote_inputs']
+        diarizer_inputs = audio_batch['pyannote_inputs']
         diarization_segments = processor.get_diarization_segments(diarizer_inputs)
         logger.debug('Diarization time: {}'.format(time.perf_counter() - start_time))
-
 
         # Transcription: 
         start_time = time.perf_counter()
 
-        whisper_inputs = batch['whisper_inputs']
+        whisper_inputs = audio_batch['whisper_inputs']
         whisper_inputs.input_features = whisper_inputs.to(device)
         transcriptions = processor.transcript(whisper_inputs)
 
@@ -130,7 +148,7 @@ if __name__ == '__main__':
         start_time = time.perf_counter()
 
         hyp_text_batch, hyp_labels_batch, hyp_diarized_text_batch = processor.orchestrate(transcriptions, diarization_segments)
-        ref_text_batch, ref_labels_batch, ref_diarized_text_batch = processor.get_references(batch['transcripts'], batch['speakers'])
+        ref_text_batch, ref_labels_batch, ref_diarized_text_batch = processor.get_references(labels_batch['transcripts'], labels_batch['speakers'])
         
         logger.debug('Orchestration : {}'.format(time.perf_counter() - start_time))
 
@@ -141,8 +159,11 @@ if __name__ == '__main__':
             ref_labels_batch, 
             hyp_text_batch, 
             hyp_labels_batch, 
-            hyp_diarized_text_batch
+            hyp_diarized_text_batch 
         )
+        start_time = time.perf_counter()
+
+        accelerator.wait_for_everyone()
 
     processed_dataset.push_to_hub('kamilakesbi/test', private=True)
 
