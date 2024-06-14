@@ -299,6 +299,8 @@ if __name__ == '__main__':
         start_time = time.perf_counter()
 
         accelerator.wait_for_everyone()
+        
+        break
 
 
     if accelerator.is_main_process:
