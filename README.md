@@ -29,8 +29,23 @@ python3 construct_fisher.py \
     --hub_folder=kamilakesbi/fisher_full
 ```
 
-
 ## Process Fisher dataset: 
+
+```
+accelerate launch --num_processes 2 preprocessing/run.py \
+    --asr_name_or_path "distil-whisper/distil-large-v3" \
+    --diarizer_name_or_path "pyannote/speaker-diarization-3.1" \
+    --attn_implementation 'sdpa' \
+    --dtype 'bfloat16' \
+    --dataset_name 'kamilakesbi/fisher_medium' \
+    --dataset_split_name 'train' \
+    --per_device_batch_size 4 \
+    --dataloader_num_workers 8 \
+    --dtype "bfloat16" \
+    --streaming \
+    --push_to_hub \
+    --output_hub_repository "kamilakesbi/processed_fisher" 
+```
 
 ```
 python3 preprocessing/run.py \
@@ -40,16 +55,14 @@ python3 preprocessing/run.py \
     --dtype 'bfloat16' \
     --dataset_name 'kamilakesbi/fisher_medium' \
     --dataset_split_name 'train' \
-    --per_device_batch_size 4 \
-    --dataloader_num_workers 4 \
+    --per_device_batch_size 8 \
+    --dataloader_num_workers 8 \
     --dtype "bfloat16" \
     --streaming \
-    --per_device_batch_size 2 \
-    --dataloader_num_workers 8 \
     --push_to_hub \
-    --output_hub_repository "kamilakesbi/processed_fisher" 
+    --output_hub_repository "kamilakesbi/processed_fisher" \
+    --log_file_name "bs_8_num_workers_8.log"
 ```
-
 
 ## prepare_data: 
 

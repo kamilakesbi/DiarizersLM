@@ -6,7 +6,7 @@ from pyannote.audio import Pipeline
 
 from accelerate import Accelerator, InitProcessGroupKwargs
 from torch.utils.data import DataLoader
-from utils import add_batch_to_dataset, DataCollatorAudio, DataCollatorLabels
+from utils import DataCollatorAudio, DataCollatorLabels, add_batch_to_dataset
 from processor import Processor
 from tqdm import tqdm 
 import logging 
@@ -109,19 +109,25 @@ class DataArguments:
         metadata={"help": "Hub repository"},
     )
 
+    log_file_name: str = field(
+        default = None, 
+        metadata={"help": "Log File Name"},
+    )
+
 if __name__ == '__main__': 
+
+    parser = HfArgumentParser((ModelArguments, DataArguments))
+    model_args, data_args = parser.parse_args_into_dataclasses()
 
     # Create a logger
     logger = logging.getLogger('my_logger')
     logger.setLevel(logging.DEBUG)
-    file_handler = logging.FileHandler('my_log_file.log')
+    file_handler = logging.FileHandler(str(data_args.log_file_name))
     file_handler.setLevel(logging.DEBUG)
     formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
     file_handler.setFormatter(formatter)
     logger.addHandler(file_handler)
 
-    parser = HfArgumentParser((ModelArguments, DataArguments))
-    model_args, data_args = parser.parse_args_into_dataclasses()
 
     # Dataset Processing Hyperparameters : 
     dataset_name = str(data_args.dataset_name)
@@ -160,6 +166,8 @@ if __name__ == '__main__':
     )
     device = accelerator.device
 
+    device = 'cuda:0'
+
     # Load prompt options: 
     prompts_options = utils.PromptOptions()
 
@@ -172,10 +180,10 @@ if __name__ == '__main__':
         low_cpu_mem_usage=True,
         torch_dtype=torch_dtype,
         attn_implementation=str(model_args.attn_implementation), 
-    )
+    ).to(torch.device(device))
 
     # Load diarization pipeline: 
-    diarization_pipeline = Pipeline.from_pretrained(diarizer_model_name)
+    diarization_pipeline = Pipeline.from_pretrained(diarizer_model_name).to(torch.device(device))
 
     # Load Normalizer: 
     normalizer = WhisperTokenizer.from_pretrained(str(normalizer_name))
@@ -193,7 +201,6 @@ if __name__ == '__main__':
         normalizer, 
         prompts_options
     )
-
 
     with accelerator.main_process_first(): 
         if streaming: 
@@ -259,9 +266,9 @@ if __name__ == '__main__':
         start_time = time.perf_counter()
 
         diarizer_inputs = audio_batch['pyannote_inputs']
+
         diarization_segments = processor.get_diarization_segments(diarizer_inputs)
         logger.debug('Diarization time: {}'.format(time.perf_counter() - start_time))
-
 
         # Transcription: 
         start_time = time.perf_counter()
@@ -274,7 +281,6 @@ if __name__ == '__main__':
 
         # Orchestration: 
         start_time = time.perf_counter()
-
 
         hyp_text_batch, hyp_labels_batch, hyp_diarized_text_batch = processor.orchestrate(transcriptions, diarization_segments)
         ref_text_batch, ref_labels_batch, ref_diarized_text_batch = processor.get_references(labels_batch['transcripts'], labels_batch['speakers'])
