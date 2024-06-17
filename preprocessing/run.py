@@ -135,7 +135,7 @@ if __name__ == '__main__':
     per_device_batch_size = int(data_args.per_device_batch_size)
     dataloader_num_workers = int(data_args.dataloader_num_workers)
     num_proc = int(data_args.num_proc) if data_args.num_proc is not None else None
-    streaming = str(data_args.streaming)
+    streaming = data_args.streaming
 
     logger.debug('Per device batch size: {}'.format(per_device_batch_size))
     logger.debug('Data loader num workers: {}'.format(dataloader_num_workers))
@@ -166,8 +166,6 @@ if __name__ == '__main__':
     )
     device = accelerator.device
 
-    device = 'cuda:0'
-
     # Load prompt options: 
     prompts_options = utils.PromptOptions()
 
@@ -192,6 +190,9 @@ if __name__ == '__main__':
 
     # Prepare models for accelerate: 
     diarization_pipeline, asr_model, asr_processor, normalizer = accelerator.prepare(diarization_pipeline, asr_model, asr_processor, normalizer)
+
+    if accelerator.num_processes > 1: 
+        asr_model = asr_model.module
 
     # Prepare Processor: 
     processor = Processor(
@@ -274,7 +275,7 @@ if __name__ == '__main__':
         start_time = time.perf_counter()
 
         whisper_inputs = audio_batch['whisper_inputs']
-        whisper_inputs.input_features = whisper_inputs.to(device)
+        whisper_inputs.input_features = whisper_inputs.to(device, dtype=torch_dtype)
         transcriptions = processor.transcript(whisper_inputs)
 
         logger.debug('Transcription: {}'.format(time.perf_counter() - start_time))
@@ -299,14 +300,11 @@ if __name__ == '__main__':
         start_time = time.perf_counter()
 
         accelerator.wait_for_everyone()
-        
         break
-
-
+    
     if accelerator.is_main_process:
         if str(data_args.push_to_hub): 
             processed_dataset.push_to_hub(str(data_args.output_hub_repository), private=True)
-
 
 
 
