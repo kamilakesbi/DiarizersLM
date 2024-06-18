@@ -6,7 +6,7 @@ from pyannote.audio import Pipeline
 
 from accelerate import Accelerator, InitProcessGroupKwargs
 from torch.utils.data import DataLoader
-from utils import DataCollatorAudio, DataCollatorLabels, add_batch_to_dataset
+from utils import DataCollatorAudio, DataCollatorLabels, add_batch_to_dataset, vram_monitoring
 from processor import Processor
 from tqdm import tqdm 
 import logging 
@@ -221,7 +221,6 @@ if __name__ == '__main__':
                 num_proc=num_proc,
             )
 
-
     raw_dataset = raw_dataset.cast_column(
         'audio',
         Audio(sampling_rate=sample_rate),
@@ -262,19 +261,12 @@ if __name__ == '__main__':
 
     logger.debug('Entering dataloder loop: ')
 
-    print(psutil.virtual_memory())
-    if psutil.virtual_memory().percent > 70: 
-        sys.exit(0)
-
     start_time = time.perf_counter()
     for step, (audio_batch, labels_batch) in tqdm(enumerate(zip(audio_dataloader,labels_dataloader))):
 
         logger.debug('Data loading time: {}'.format(time.perf_counter() - start_time))
 
-        print(psutil.virtual_memory())
-        if psutil.virtual_memory().percent > 70: 
-            sys.exit(0)
-
+        vram_monitoring(60)
 
         # Diarization:
         start_time = time.perf_counter()

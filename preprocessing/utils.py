@@ -3,6 +3,14 @@ from typing import Any, Dict, List, Union
 from dataclasses import dataclass
 import torch
 from torchaudio import functional as F
+import psutil
+import sys
+
+def vram_monitoring(threhsold = 70):
+            
+    if psutil.virtual_memory().percent > threhsold: 
+        print(psutil.virtual_memory().percent)
+        sys.exit(0)
 
 
 def add_batch_to_dataset(
