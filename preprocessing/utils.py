@@ -1,10 +1,8 @@
 import numpy as np 
-from diarizationlm import utils 
 from typing import Any, Dict, List, Union
 from dataclasses import dataclass
 import torch
 from torchaudio import functional as F
-
 
 
 def add_batch_to_dataset(
@@ -28,8 +26,6 @@ def add_batch_to_dataset(
         processed_dataset = processed_dataset.add_item(dataset_row)
 
     return processed_dataset
-
-
 
 
 @dataclass
@@ -60,12 +56,6 @@ class DataCollatorAudio:
     ) -> Dict[str, np.ndarray]:
 
         batch = {}
-
-        # batch['timestamps_start'] = [f['timestamps_start'] for f in features]
-        # batch['timestamps_end'] = [f['timestamps_end'] for f in features]
-        # batch['speakers'] = [f['speakers'] for f in features]
-        # batch['transcripts'] = [f['transcripts'] for f in features] 
-
         samples = [example['audio']["array"] for example in features]
 
         in_sampling_rate = features[0]['audio']['sampling_rate']
