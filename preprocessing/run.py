@@ -221,7 +221,6 @@ if __name__ == '__main__':
                 num_proc=num_proc,
             )
 
-    accelerator.wait_for_everyone()
 
     raw_dataset = raw_dataset.cast_column(
         'audio',
