@@ -56,12 +56,7 @@ class DataCollatorAudio:
     ) -> Dict[str, np.ndarray]:
 
         batch = {}
-        samples = [example['audio']["array"] for example in features]
-
-        in_sampling_rate = features[0]['audio']['sampling_rate']
-
-        if in_sampling_rate != self.sampling_rate:
-            samples = [F.resample(torch.from_numpy(np.array(input)), in_sampling_rate, self.sampling_rate).numpy() for input in samples] 
+        samples = [example['audio']["array"] for example in features]       
 
         batch['whisper_inputs'] = self.processor(
             samples,
@@ -87,9 +82,7 @@ class DataCollatorLabels:
         features: List[Dict[str, Union[List[int], np.ndarray]]], 
     ) -> Dict[str, np.ndarray]:
 
-
         batch = {}
-
         batch['timestamps_start'] = [f['timestamps_start'] for f in features]
         batch['timestamps_end'] = [f['timestamps_end'] for f in features]
         batch['speakers'] = [f['speakers'] for f in features]

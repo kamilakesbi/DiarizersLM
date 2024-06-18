@@ -131,7 +131,7 @@ class Processor:
             labels_batch.append(word_labels)
 
         for i in range(len(transcripts_batch)): 
-            diarized_transcript_batch.append(utils.create_diarized_text(transcripts_batch[i].split(' '), transcripts_batch[i].split(' ')))
+            diarized_transcript_batch.append(utils.create_diarized_text(transcripts_batch[i].split(' '), labels_batch[i].split(' ')))
 
         return transcripts_batch, labels_batch, diarized_transcript_batch
 

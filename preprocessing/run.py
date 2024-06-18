@@ -1,4 +1,4 @@
-from datasets import load_dataset, Dataset
+from datasets import load_dataset, Dataset, Audio
 from diarizationlm import utils
 import torch 
 from transformers import WhisperProcessor, WhisperForConditionalGeneration, WhisperTokenizer
@@ -16,6 +16,8 @@ from datetime import timedelta
 from dataclasses import dataclass, field
 from transformers import HfArgumentParser
 from typing import Optional
+import psutil
+import sys
 
 
 @dataclass
@@ -183,9 +185,9 @@ if __name__ == '__main__':
     # Load diarization pipeline: 
     diarization_pipeline = Pipeline.from_pretrained(diarizer_model_name).to(torch.device(device))
 
+    
     # Load Normalizer: 
     normalizer = WhisperTokenizer.from_pretrained(str(normalizer_name))
-
     sample_rate = asr_processor.feature_extractor.sampling_rate
 
     # Prepare models for accelerate: 
@@ -220,6 +222,11 @@ if __name__ == '__main__':
             )
 
     accelerator.wait_for_everyone()
+
+    raw_dataset = raw_dataset.cast_column(
+        'audio',
+        Audio(sampling_rate=sample_rate),
+    )
 
     label_dataset = raw_dataset.select_columns(['timestamps_start', 'timestamps_end', 'speakers', 'transcripts'])
     audio_dataset = raw_dataset.select_columns(['audio'])
@@ -256,14 +263,21 @@ if __name__ == '__main__':
 
     logger.debug('Entering dataloder loop: ')
 
+    print(psutil.virtual_memory())
+    if psutil.virtual_memory().percent > 70: 
+        sys.exit(0)
 
     start_time = time.perf_counter()
     for step, (audio_batch, labels_batch) in tqdm(enumerate(zip(audio_dataloader,labels_dataloader))):
-        
 
         logger.debug('Data loading time: {}'.format(time.perf_counter() - start_time))
 
-        # Diarization: 
+        print(psutil.virtual_memory())
+        if psutil.virtual_memory().percent > 70: 
+            sys.exit(0)
+
+
+        # Diarization:
         start_time = time.perf_counter()
 
         diarizer_inputs = audio_batch['pyannote_inputs']
@@ -271,7 +285,7 @@ if __name__ == '__main__':
         diarization_segments = processor.get_diarization_segments(diarizer_inputs)
         logger.debug('Diarization time: {}'.format(time.perf_counter() - start_time))
 
-        # Transcription: 
+        # Transcription:
         start_time = time.perf_counter()
 
         whisper_inputs = audio_batch['whisper_inputs']
@@ -302,8 +316,10 @@ if __name__ == '__main__':
         accelerator.wait_for_everyone()
     
     if accelerator.is_main_process:
-        if str(data_args.push_to_hub): 
+        if str(data_args.push_to_hub):
             processed_dataset.push_to_hub(str(data_args.output_hub_repository), private=True)
+
+
 
 
 
