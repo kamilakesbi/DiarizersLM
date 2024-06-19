@@ -164,16 +164,15 @@ if __name__ == '__main__':
     accelerator = Accelerator(
         mixed_precision=mixed_precision,
         kwargs_handlers=[kwargs],
-     
     )
     device = accelerator.device
 
-    # Load prompt options: 
+    # Load prompt options:
     prompts_options = utils.PromptOptions()
 
     # Load ASR Model: 
     asr_processor = WhisperProcessor.from_pretrained(asr_model_name, token=True)
-
+    print('ok')
     asr_model = WhisperForConditionalGeneration.from_pretrained(
         asr_model_name, 
         token=True, 
@@ -185,7 +184,6 @@ if __name__ == '__main__':
     # Load diarization pipeline: 
     diarization_pipeline = Pipeline.from_pretrained(diarizer_model_name).to(torch.device(device))
 
-    
     # Load Normalizer: 
     normalizer = WhisperTokenizer.from_pretrained(str(normalizer_name))
     sample_rate = asr_processor.feature_extractor.sampling_rate
