@@ -292,6 +292,12 @@ if __name__ == '__main__':
         ref_text_batch, ref_labels_batch, ref_diarized_text_batch = processor.get_references(labels_batch['transcripts'], labels_batch['speakers'])
         
         logger.debug('Orchestration : {}'.format(time.perf_counter() - start_time))
+        
+        accelerator.wait_for_everyone()
+
+        hyp_text_batch = accelerator.gather_for_metrics(hyp_text_batch)
+        hyp_labels_batch = accelerator.gather_for_metrics(hyp_labels_batch)
+        hyp_diarized_text_batch = accelerator.gather_for_metrics(hyp_diarized_text_batch)
 
         processed_dataset = add_batch_to_dataset(
             processed_dataset, 
@@ -303,8 +309,8 @@ if __name__ == '__main__':
             hyp_diarized_text_batch 
         )
         start_time = time.perf_counter()
-        accelerator.wait_for_everyone()
-    
+
+    accelerator.wait_for_everyone()
 
     if accelerator.is_main_process:
         if str(data_args.push_to_hub):
