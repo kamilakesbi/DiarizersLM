@@ -13,6 +13,13 @@ def vram_monitoring(threhsold = 70):
         sys.exit(0)
 
 
+def compute_duration(batch):
+        
+    batch['duration'] = len(batch['audio']['array']) / batch["audio"]['sampling_rate']
+
+    return batch
+
+
 def add_batch_to_dataset(
     processed_dataset, 
     ref_diarized_text_batch, 
@@ -65,6 +72,11 @@ class DataCollatorAudio:
 
         batch = {}
         samples = [example['audio']["array"] for example in features]       
+
+        in_sampling_rate = features[0]['audio']['sampling_rate']
+
+        if in_sampling_rate != self.sampling_rate:
+            samples = [F.resample(torch.from_numpy(np.array(input)), in_sampling_rate, self.sampling_rate).numpy() for input in samples] 
 
         batch['whisper_inputs'] = self.processor(
             samples,

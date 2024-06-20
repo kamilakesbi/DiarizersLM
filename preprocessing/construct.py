@@ -4,6 +4,8 @@ from tqdm import tqdm
 import argparse
 from huggingface_hub import snapshot_download
 from datasets import Dataset, Audio
+import torchaudio.transforms as T
+
 
 
 def fisher_dataset_for_speaker_diarization(fpath="/data/fisher/data"): 
@@ -31,13 +33,20 @@ def fisher_dataset_for_speaker_diarization(fpath="/data/fisher/data"):
         speakers = []
         transcripts = []
 
+
         # ignore non-transcription files
         if "readme" not in txt_filename and "doc" not in txt_filename:
             # get the corresponding audio file and load
             sph_idx = sph_filenames.index(txt_filename+".sph")
-            segment, sampling_rate = torchaudio.load(sph_files[sph_idx], format="sph")
 
-            samples = segment[0] + segment[1]
+            segment, sampling_rate = torchaudio.load(sph_files[sph_idx], format="sph")
+        
+            transform = T.Resample(8000, 16000)
+            segment = transform(segment)
+            audio_path = sph_files[sph_idx].split('.')[0] + '.wav'
+            torchaudio.save(uri = audio_path, src=segment, format = 'wav', sample_rate=16000)
+
+            segment, sr = torchaudio.load(uri = audio_path, format='wav')
 
             with open(file) as f:
                 for line in f:
@@ -56,7 +65,7 @@ def fisher_dataset_for_speaker_diarization(fpath="/data/fisher/data"):
                         speakers.append(speaker[0])
                         transcripts.append(transcript)
             yield {
-                "audio": {"path": file, "array": samples, "sampling_rate": sampling_rate},
+                "audio": {"path": audio_path, "array": segment[0] + segment[1], "sampling_rate": sr},
                 "timestamps_start": timestamps_start,
                 "timestamps_end": timestamps_end,
                 "speakers": speakers,
@@ -65,29 +74,15 @@ def fisher_dataset_for_speaker_diarization(fpath="/data/fisher/data"):
 
 if __name__ == "__main__":
 
-    # Create the parser
-    parser = argparse.ArgumentParser()
+    # args = parser.parse_args()
+    preprocess_cache_dir = '/data/fisher'
+    hub_folder = 'kamilakesbi/fisher'
 
-    # Add arguments
-    parser.add_argument('--download', default = False)
-    parser.add_argument('--local_fisher_dir', default= "/data/fisher/data")
-
-    parser.add_argument('--preprocess', default=False)
-    parser.add_argument('--preprocess_cache_dir', default='/data/fisher')
-    parser.add_argument('--hub_folder', default='kamilakesbi/fisher_full')
-    
-    args = parser.parse_args()
-
-    if args.download: 
-        snapshot_download(repo_id="speech-seq2seq/fisher", repo_type="dataset", local_dir=args.local_fisher_dir)
-    
-    if args.preprocess: 
-        print('ok')
-        dataset = Dataset.from_generator(
-            fisher_dataset_for_speaker_diarization, 
-            writer_batch_size=200,
-            cache_dir=args.preprocess_cache_dir, 
-        )
-        dataset = dataset.cast_column("audio", Audio())
-        print('ok')
-        dataset.push_to_hub(args.hub_folder, private=True)
+    # if args.preprocess: 
+    dataset = Dataset.from_generator(
+        fisher_dataset_for_speaker_diarization, 
+        writer_batch_size=200,
+        cache_dir=preprocess_cache_dir, 
+    )
+    dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
+    dataset.push_to_hub(hub_folder, private=True)

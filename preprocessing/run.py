@@ -18,6 +18,7 @@ from transformers import HfArgumentParser
 from typing import Optional
 import psutil
 import sys
+from utils import compute_duration
 
 
 @dataclass
@@ -172,7 +173,7 @@ if __name__ == '__main__':
 
     # Load ASR Model: 
     asr_processor = WhisperProcessor.from_pretrained(asr_model_name, token=True)
-    print('ok')
+
     asr_model = WhisperForConditionalGeneration.from_pretrained(
         asr_model_name, 
         token=True, 
@@ -219,10 +220,11 @@ if __name__ == '__main__':
                 num_proc=num_proc,
             )
 
-    raw_dataset = raw_dataset.cast_column(
-        'audio',
-        Audio(sampling_rate=sample_rate),
-    )
+    raw_dataset = raw_dataset.select(range(10))
+
+    with accelerator.main_process_first(): 
+        raw_dataset = raw_dataset.map(compute_duration, num_proc=num_proc)
+        raw_dataset = raw_dataset.sort('duration')
 
     label_dataset = raw_dataset.select_columns(['timestamps_start', 'timestamps_end', 'speakers', 'transcripts'])
     audio_dataset = raw_dataset.select_columns(['audio'])
@@ -264,7 +266,7 @@ if __name__ == '__main__':
 
         logger.debug('Data loading time: {}'.format(time.perf_counter() - start_time))
 
-        vram_monitoring(60)
+        vram_monitoring(80)
 
         # Diarization:
         start_time = time.perf_counter()
@@ -301,9 +303,9 @@ if __name__ == '__main__':
             hyp_diarized_text_batch 
         )
         start_time = time.perf_counter()
-
         accelerator.wait_for_everyone()
     
+
     if accelerator.is_main_process:
         if str(data_args.push_to_hub):
             processed_dataset.push_to_hub(str(data_args.output_hub_repository), private=True)
