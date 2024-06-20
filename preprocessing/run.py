@@ -220,11 +220,10 @@ if __name__ == '__main__':
                 num_proc=num_proc,
             )
 
-    raw_dataset = raw_dataset.select(range(10))
-
-    with accelerator.main_process_first(): 
-        raw_dataset = raw_dataset.map(compute_duration, num_proc=num_proc)
-        raw_dataset = raw_dataset.sort('duration')
+    # raw_dataset = raw_dataset.select(range(200))
+    # with accelerator.main_process_first(): 
+    #     raw_dataset = raw_dataset.map(compute_duration, num_proc=num_proc)
+    #     raw_dataset = raw_dataset.sort('duration')
 
     label_dataset = raw_dataset.select_columns(['timestamps_start', 'timestamps_end', 'speakers', 'transcripts'])
     audio_dataset = raw_dataset.select_columns(['audio'])
@@ -274,6 +273,8 @@ if __name__ == '__main__':
         diarizer_inputs = audio_batch['pyannote_inputs']
 
         diarization_segments = processor.get_diarization_segments(diarizer_inputs)
+        # block async cpu
+        torch.cuda.synchronize()
         logger.debug('Diarization time: {}'.format(time.perf_counter() - start_time))
 
         # Transcription:
@@ -282,7 +283,7 @@ if __name__ == '__main__':
         whisper_inputs = audio_batch['whisper_inputs']
         whisper_inputs.input_features = whisper_inputs.to(device, dtype=torch_dtype)
         transcriptions = processor.transcript(whisper_inputs)
-
+        torch.cuda.synchronize()
         logger.debug('Transcription: {}'.format(time.perf_counter() - start_time))
 
         # Orchestration: 
@@ -290,14 +291,18 @@ if __name__ == '__main__':
 
         hyp_text_batch, hyp_labels_batch, hyp_diarized_text_batch = processor.orchestrate(transcriptions, diarization_segments)
         ref_text_batch, ref_labels_batch, ref_diarized_text_batch = processor.get_references(labels_batch['transcripts'], labels_batch['speakers'])
-        
+        torch.cuda.synchronize()
+
         logger.debug('Orchestration : {}'.format(time.perf_counter() - start_time))
         
-        accelerator.wait_for_everyone()
+        start_time = time.perf_counter()
 
         hyp_text_batch = accelerator.gather_for_metrics(hyp_text_batch)
         hyp_labels_batch = accelerator.gather_for_metrics(hyp_labels_batch)
         hyp_diarized_text_batch = accelerator.gather_for_metrics(hyp_diarized_text_batch)
+        torch.cuda.synchronize()
+
+        logger.debug('Gather for metrics: {}'.format(time.perf_counter() - start_time))
 
         processed_dataset = add_batch_to_dataset(
             processed_dataset, 
@@ -308,13 +313,15 @@ if __name__ == '__main__':
             hyp_labels_batch, 
             hyp_diarized_text_batch 
         )
+        torch.cuda.synchronize()
         start_time = time.perf_counter()
 
-    accelerator.wait_for_everyone()
+        if step % 10 == 0: 
+            accelerator.wait_for_everyone()
 
-    if accelerator.is_main_process:
-        if str(data_args.push_to_hub):
-            processed_dataset.push_to_hub(str(data_args.output_hub_repository), private=True)
+            if accelerator.is_main_process:
+                if str(data_args.push_to_hub):
+                    processed_dataset.push_to_hub(str(data_args.output_hub_repository), private=True)
 
 
 

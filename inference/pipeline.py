@@ -16,18 +16,18 @@ class DiarizersLmPipeline:
         self,
         asr_pipeline,
         diarization_pipeline,
-        llm_pipeline, 
+        # llm_pipeline, 
     ):
         self.asr_pipeline = asr_pipeline
         self.sampling_rate = asr_pipeline.feature_extractor.sampling_rate
         self.diarization_pipeline = diarization_pipeline
 
         self.prompts_options = utils.PromptOptions()
-        self.llm_pipeline = llm_pipeline
-        self.terminators = [
-            llm_pipeline.tokenizer.eos_token_id,
-            llm_pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")
-        ]
+        # self.llm_pipeline = llm_pipeline
+        # self.terminators = [
+        #     llm_pipeline.tokenizer.eos_token_id,
+        #     llm_pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")
+        # ]
         self.max_new_tokens = 4096
 
     @classmethod
@@ -54,15 +54,15 @@ class DiarizersLmPipeline:
         if 'device' in kwargs: 
             diarization_pipeline.to(torch.device(kwargs['device']))
         
-        llm_model = pipeline(
-            "text-generation",
-            model="meta-llama/Meta-Llama-3-8B-Instruct",
-            model_kwargs={"torch_dtype": torch.bfloat16, 'attn_implementation': attn_implementation},
-            token=use_auth_token,
-            **kwargs,
-        )
+        # llm_model = pipeline(
+        #     "text-generation",
+        #     model="meta-llama/Meta-Llama-3-8B-Instruct",
+        #     model_kwargs={"torch_dtype": torch.bfloat16, 'attn_implementation': attn_implementation},
+        #     token=use_auth_token,
+        #     **kwargs,
+        # )
 
-        return cls(asr_pipeline, diarization_pipeline, llm_model)
+        return cls(asr_pipeline, diarization_pipeline)
     
     def __call__( 
             self,        
@@ -79,8 +79,8 @@ class DiarizersLmPipeline:
         print('Generate completions: ')
         completions = self.generate_completions(prompts)
         
-        print('Post process completions: ')
-        output = self.post_process(completions, hyp_text, hyp_labels)
+        # print('Post process completions: ')
+        # output = self.post_process(completions, hyp_text, hyp_labels)
 
         return output
 
@@ -309,3 +309,31 @@ class DiarizersLmPipeline:
     
 
 
+if __name__ == '__main__': 
+
+    import torch
+    from pipeline import DiarizersLmPipeline
+    from datasets import load_dataset
+    import torch
+    from scipy.io.wavfile import write
+
+    # load dataset of concatenated LibriSpeech samples
+    dataset = load_dataset("diarizers-community/ami",'ihm', split="train", streaming=True)
+    # get first sample
+    sample = next(iter(dataset))
+
+    sample['audio']['array'] = sample['audio']['array'][60*16000:3*60*16000]
+
+    audio = write( filename='example.wav', rate=16000, data=sample['audio']['array'])
+
+    device = "cuda:0" if torch.cuda.is_available() else "cpu"
+
+    pipeline = DiarizersLmPipeline.from_pretrained(
+        asr_model = "openai/whisper-large-v3",
+        diarizer_model = "pyannote/speaker-diarization-3.1", 
+        llm_model = "meta-llama/Meta-Llama-3-8B",
+        device=device, 
+    )
+
+    output = pipeline(sample['audio'])
+    print(pipeline)

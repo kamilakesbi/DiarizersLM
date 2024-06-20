@@ -32,18 +32,20 @@ python3 construct_fisher.py \
 ## Process Fisher dataset: 
 
 ```
-accelerate launch --num_processes 2 preprocessing/run.py \
+accelerate launch --num_processes 4 preprocessing/run.py \
     --asr_name_or_path "distil-whisper/distil-large-v3" \
     --diarizer_name_or_path "pyannote/speaker-diarization-3.1" \
     --attn_implementation 'sdpa' \
     --dtype 'bfloat16' \
     --dataset_name 'kamilakesbi/fisher_full' \
     --dataset_split_name 'train' \
-    --per_device_batch_size 2 \
+    --num_proc 12 \
+    --per_device_batch_size 8 \
     --dataloader_num_workers 4 \
     --dtype "bfloat16" \
     --push_to_hub \
-    --output_hub_repository "kamilakesbi/processed_fisher"
+    --output_hub_repository "kamilakesbi/processed_fisher" \
+    --log_file_name "bs_8_num_workers_4.log"
 ```
 
 ```

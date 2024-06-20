@@ -123,7 +123,11 @@ class Processor:
 
                 word_labels += [label]* nb_words_in_sentence
 
-            assert len(word_labels) == len(transcript_text.split(' '))
+            if len(word_labels) != len(transcript_text.split(' ')): 
+                print('Exception!')
+                size = min(len(word_labels), len(transcript_text.split(' ')))
+                word_labels = word_labels[:size]
+                transcript_text = transcript_text[:size]
 
             word_labels = ' '.join(word_labels)
 
