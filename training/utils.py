@@ -7,10 +7,18 @@ def prepare_prompts_and_completions(batch, prompts_options, strategy = "hyp2ora"
 
     if strategy == 'hyp2ora': 
 
-        utterance = {"utterance_id": "0",  "hyp_text": str(batch["hyp_norm_text"][0]) , "hyp_spk": batch['hyp_norm_labels'][0]}
+        utterance = {"utterance_id": "0",  "hyp_text": str(batch["hyp_norm_text"]) , "hyp_spk": batch['hyp_norm_labels']}
         prompts = diarizationlm.generate_prompts(utterance, prompts_options)
 
-        utterance = {"utterance_id": "0",  "hyp_text": str(batch['hyp_norm_text'][0]) , "hyp_spk": batch['oracle_labels'][0]}
+        utterance = {"utterance_id": "0",  "hyp_text": str(batch['hyp_norm_text']) , "hyp_spk": batch['oracle_labels']}
+        completions = diarizationlm.generate_prompts(utterance, prompts_options)
+
+    if strategy == 'deg2ref': 
+
+        utterance = {"utterance_id": "0",  "hyp_text": str(batch["ref_text"]) , "hyp_spk": batch['deg_labels']}
+        prompts = diarizationlm.generate_prompts(utterance, prompts_options)
+
+        utterance = {"utterance_id": "0",  "hyp_text": str(batch['ref_text']) , "hyp_spk": batch['ref_labels']}
         completions = diarizationlm.generate_prompts(utterance, prompts_options)
 
     for prompt in prompts: 

@@ -9,7 +9,7 @@ from transformers import BitsAndBytesConfig
 import torch
 from diarizationlm import utils
 
-from training.utils import prepare_prompts_and_completions
+from utils import prepare_prompts_and_completions
 from datasets import DatasetDict
 
 
@@ -32,13 +32,12 @@ if __name__ == "__main__":
     prompts_options.completion_suffix = '<|eod_id|>"'
 
     dataset['train'] = dataset['train'].map(
-        prepare_prompts_and_completions, 
-        batched=True,
-        batch_size=1, 
+        lambda x: prepare_prompts_and_completions(x, prompts_options), 
         remove_columns=dataset['train'].column_names, 
         num_proc=1, 
     )
 
+    dataset['train'] = dataset['train'].select(range(5))
 
     train_testvalid = dataset['train'].train_test_split(test_size=0.2, seed=0)
 
@@ -69,11 +68,17 @@ if __name__ == "__main__":
         tokenizer.add_special_tokens({'pad_token': '[PAD]'})
         model.resize_token_embeddings(len(tokenizer))
 
+    # instruction_template = "### Human:"
+    # response_template = "### Assistant:"
+
+    # collator = DataCollatorForCompletionOnlyLM(instruction_template=instruction_template, response_template=response_template, tokenizer=tokenizer, mlm=False)
+
     training_args = TrainingArguments(
         per_device_train_batch_size=1,
         gradient_accumulation_steps=1,
         per_device_eval_batch_size=4,
         num_train_epochs=3,
+        do_eval=True, 
         learning_rate=1e-3,
         warmup_ratio=0.1,
         logging_steps=10,
@@ -92,7 +97,7 @@ if __name__ == "__main__":
         eval_dataset=dataset['validation'], 
         max_seq_length=4096,
         peft_config=peft_config,
+        # collator=collator, 
         compute_metrics=metrics, 
     )
-
-    trainer.train()
+    trainer.evaluate()
