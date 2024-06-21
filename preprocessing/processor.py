@@ -166,24 +166,24 @@ class Processor:
         return ref_texts_batch, ref_labels_batch, ref_diarized_texts_batch
 
 
-    def get_oracle_and_degraded_speakers(self, hyp_text_batch, hyp_labels_batch, ref_text_batch, ref_labels_batch): 
+    # def get_oracle_and_degraded_speakers(self, hyp_text_batch, hyp_labels_batch, ref_text_batch, ref_labels_batch): 
 
-        deg_speakers = []
-        oracle_speakers = []
-        for i in range(len(hyp_text_batch)): 
+    #     deg_speakers = []
+    #     oracle_speakers = []
+    #     for i in range(len(hyp_text_batch)): 
 
-            oracle_speakers.append(utils.transcript_preserving_speaker_transfer(
-                        src_text=ref_text_batch[i],
-                        src_spk=ref_labels_batch[i],
-                        tgt_text=hyp_text_batch[i],
-                        tgt_spk=hyp_labels_batch[i],
-            ))
+    #         oracle_speakers.append(utils.transcript_preserving_speaker_transfer(
+    #                     src_text=ref_text_batch[i],
+    #                     src_spk=ref_labels_batch[i],
+    #                     tgt_text=hyp_text_batch[i],
+    #                     tgt_spk=hyp_labels_batch[i],
+    #         ))
     
-            deg_speakers.append(utils.transcript_preserving_speaker_transfer(
-                        src_text=hyp_text_batch[i],
-                        src_spk=hyp_labels_batch[i],
-                        tgt_text=ref_text_batch,
-                        tgt_spk=ref_labels_batch,
-            ))
+    #         deg_speakers.append(utils.transcript_preserving_speaker_transfer(
+    #                     src_text=hyp_text_batch[i],
+    #                     src_spk=hyp_labels_batch[i],
+    #                     tgt_text=ref_text_batch,
+    #                     tgt_spk=ref_labels_batch,
+    #         ))
         
-        return oracle_speakers, deg_speakers
+    #     return oracle_speakers, deg_speakers

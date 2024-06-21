@@ -28,8 +28,8 @@ def add_batch_to_dataset(
     hyp_text_batch, 
     hyp_labels_batch, 
     hyp_diarized_text_batch, 
-    oracle_speakers, 
-    deg_speakers
+    # oracle_speakers, 
+    # deg_speakers
 ): 
     
     for i in range(len(ref_diarized_text_batch)): 
@@ -40,8 +40,8 @@ def add_batch_to_dataset(
         dataset_row['hyp_text'].append(hyp_text_batch[i])
         dataset_row['hyp_labels'].append(hyp_labels_batch[i])
         dataset_row['hyp_diarized_text'].append(hyp_diarized_text_batch[i])
-        dataset_row['oracle_speakers'].append(oracle_speakers[i])
-        dataset_row['deg_speakers'].append(deg_speakers[i])
+        # dataset_row['oracle_speakers'].append(oracle_speakers[i])
+        # dataset_row['deg_speakers'].append(deg_speakers[i])
         processed_dataset = processed_dataset.add_item(dataset_row)
 
     return processed_dataset

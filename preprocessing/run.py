@@ -292,7 +292,7 @@ if __name__ == '__main__':
         hyp_text_batch, hyp_labels_batch, hyp_diarized_text_batch = processor.orchestrate(transcriptions, diarization_segments)
         ref_text_batch, ref_labels_batch, ref_diarized_text_batch = processor.get_references(labels_batch['transcripts'], labels_batch['speakers'])
 
-        oracle_speakers, deg_speakers = processor.get_oracle_and_degraded_speakers(hyp_text_batch, hyp_labels_batch, ref_text_batch, ref_labels_batch)
+        # oracle_speakers, deg_speakers = processor.get_oracle_and_degraded_speakers(hyp_text_batch, hyp_labels_batch, ref_text_batch, ref_labels_batch)
         torch.cuda.synchronize()
 
         logger.debug('Orchestration : {}'.format(time.perf_counter() - start_time))
@@ -302,8 +302,8 @@ if __name__ == '__main__':
         hyp_text_batch = accelerator.gather_for_metrics(hyp_text_batch)
         hyp_labels_batch = accelerator.gather_for_metrics(hyp_labels_batch)
         hyp_diarized_text_batch = accelerator.gather_for_metrics(hyp_diarized_text_batch)
-        oracle_speakers = accelerator.gather_for_metrics(oracle_speakers)
-        deg_speakers = accelerator.gather_for_metrics(deg_speakers)
+        # oracle_speakers = accelerator.gather_for_metrics(oracle_speakers)
+        # deg_speakers = accelerator.gather_for_metrics(deg_speakers)
 
         torch.cuda.synchronize()
 
@@ -317,8 +317,8 @@ if __name__ == '__main__':
             hyp_text_batch, 
             hyp_labels_batch, 
             hyp_diarized_text_batch, 
-            oracle_speakers, 
-            deg_speakers
+            # oracle_speakers, 
+            # deg_speakers
         )
         torch.cuda.synchronize()
         start_time = time.perf_counter()
