@@ -8,11 +8,11 @@ import json
 from diarizationlm import utils
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string("input", "", "Comma-separated list of json files")
-flags.DEFINE_string("output", "/tmp/output", "Output file.")
+flags.DEFINE_string("input", "/home/user/app/DiarizersLM/example_data.json", "Comma-separated list of json files")
+flags.DEFINE_string("output", "test.json", "Output file.")
 flags.DEFINE_enum(
     "output_type",
-    "tfrecord",
+    "json",
     ["tfrecord", "json", "csv", "jsonl"],
     "Output container formats for different use cases.",
 )

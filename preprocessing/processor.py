@@ -69,7 +69,7 @@ class Processor:
     def transcript(self, whisper_inputs): 
 
         asr_model_out = self.asr_model.generate(**whisper_inputs, return_timestamps=True)
-        transcripts = self.asr_processor.batch_decode(asr_model_out, output_offsets=True, skip_special_tokens=True)
+        transcripts = self.asr_processor.batch_decode(asr_model_out, output_offsets=True, skip_special_tokens=True, normalize = True)
 
         return transcripts
 
