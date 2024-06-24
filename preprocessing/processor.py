@@ -82,15 +82,16 @@ class Processor:
 
         for i, asr_output in enumerate(transcriptions): 
 
-            transcript_text = asr_output['text'].strip()
+            # transcript_text = asr_output['text'].strip()
             sentences_with_timestamps = asr_output["offsets"]
             diarization_segment = diarization_segments[i]
             word_labels = []
 
-            for sentence_with_timestamps in sentences_with_timestamps: 
+            transcript_text = ''
+            for sentence_with_timestamps in sentences_with_timestamps:
                 start_timestamp, end_timestamp = sentence_with_timestamps['timestamp']
-                sentence = sentence_with_timestamps['text']
-
+                sentence = self.normalizer.normalize(sentence_with_timestamps['text'].strip())
+                transcript_text += sentence + ' '
                 # List of segments that overlap with the current word
                 overlap_segments = [segment for segment in diarization_segment if segment['segment']['end'] >= start_timestamp and segment['segment']['start'] <= end_timestamp]
 
@@ -119,23 +120,23 @@ class Processor:
                     else: 
                         label = str(int(diarization_segment[gap_start_index]['speaker'][-1]) + 1)
 
-                nb_words_in_sentence = len(sentence.strip().split(' '))
+                nb_words_in_sentence = len(sentence.strip().split())
 
                 word_labels += [label]* nb_words_in_sentence
 
-            if len(word_labels) != len(transcript_text.split(' ')): 
+            if len(word_labels) != len(transcript_text.strip().split()): 
                 print('Exception!')
-                size = min(len(word_labels), len(transcript_text.split(' ')))
+                size = min(len(word_labels), len(transcript_text.strip().split()))
                 word_labels = word_labels[:size]
                 transcript_text = transcript_text[:size]
 
             word_labels = ' '.join(word_labels)
 
-            transcripts_batch.append(transcript_text)
+            transcripts_batch.append(transcript_text.strip())
             labels_batch.append(word_labels)
 
         for i in range(len(transcripts_batch)): 
-            diarized_transcript_batch.append(utils.create_diarized_text(transcripts_batch[i].split(' '), labels_batch[i].split(' ')))
+            diarized_transcript_batch.append(utils.create_diarized_text(transcripts_batch[i].split(), labels_batch[i].split()))
 
         return transcripts_batch, labels_batch, diarized_transcript_batch
 
@@ -154,7 +155,7 @@ class Processor:
             ref_diarized_text = ''
             for index, transcript in enumerate(transcriptions):
                 ref_diarized_text += self.speaker_prefix + speakers[index] + self.speaker_suffix + ' '
-                ref_diarized_text += self.normalizer.normalize(transcript)
+                ref_diarized_text += self.normalizer.normalize(transcript).strip()
                 ref_diarized_text += ' '
 
             ref_text, ref_labels = utils.extract_text_and_spk(ref_diarized_text, po=self.prompts_options)
@@ -165,25 +166,32 @@ class Processor:
 
         return ref_texts_batch, ref_labels_batch, ref_diarized_texts_batch
 
+    def get_oracle_and_degraded_speakers(self, hyp_text_batch, hyp_labels_batch, ref_text_batch, ref_labels_batch): 
 
-    # def get_oracle_and_degraded_speakers(self, hyp_text_batch, hyp_labels_batch, ref_text_batch, ref_labels_batch): 
-
-    #     deg_speakers = []
-    #     oracle_speakers = []
-    #     for i in range(len(hyp_text_batch)): 
-
-    #         oracle_speakers.append(utils.transcript_preserving_speaker_transfer(
-    #                     src_text=ref_text_batch[i],
-    #                     src_spk=ref_labels_batch[i],
-    #                     tgt_text=hyp_text_batch[i],
-    #                     tgt_spk=hyp_labels_batch[i],
-    #         ))
-    
-    #         deg_speakers.append(utils.transcript_preserving_speaker_transfer(
-    #                     src_text=hyp_text_batch[i],
-    #                     src_spk=hyp_labels_batch[i],
-    #                     tgt_text=ref_text_batch,
-    #                     tgt_spk=ref_labels_batch,
-    #         ))
+        deg_speakers = []
+        oracle_speakers = []
+        for i in range(len(hyp_text_batch)): 
+            
+            try: 
+                oracle_speakers.append(utils.transcript_preserving_speaker_transfer(
+                            src_text=ref_text_batch[i],
+                            src_spk=ref_labels_batch[i],
+                            tgt_text=hyp_text_batch[i],
+                            tgt_spk=hyp_labels_batch[i],
+                ))
+            except: 
+                print('exception')
+                deg_speakers.append('')
+            
+            try: 
+                deg_speakers.append(utils.transcript_preserving_speaker_transfer(
+                            src_text=hyp_text_batch[i],
+                            src_spk=hyp_labels_batch[i],
+                            tgt_text=ref_text_batch[i],
+                            tgt_spk=ref_labels_batch[i],
+                ))
+            except: 
+                print('exception')
+                deg_speakers.append('')
         
-    #     return oracle_speakers, deg_speakers
+        return oracle_speakers, deg_speakers

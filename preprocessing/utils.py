@@ -28,20 +28,20 @@ def add_batch_to_dataset(
     hyp_text_batch, 
     hyp_labels_batch, 
     hyp_diarized_text_batch, 
-    # oracle_speakers, 
-    # deg_speakers
+    hyp_oracle_labels, 
+    hyp_deg_labels
 ): 
     
     for i in range(len(ref_diarized_text_batch)): 
-        dataset_row = {"ref_diarized_text": [], "ref_text": [], "ref_labels": [], "hyp_text": [], "hyp_labels": [], "hyp_diarized_text": [], "deg_speakers": [], "oracle_speakers": []}
+        dataset_row = {"ref_diarized_text": [], "ref_text": [], "ref_labels": [], "hyp_text": [], "hyp_labels": [], "hyp_diarized_text": [], "hyp_deg_labels": [], "hyp_oracle_labels": []}
         dataset_row['ref_diarized_text'].append(ref_diarized_text_batch[i])
         dataset_row['ref_text'].append(ref_text_batch[i])
         dataset_row['ref_labels'].append(ref_labels_batch[i])
         dataset_row['hyp_text'].append(hyp_text_batch[i])
         dataset_row['hyp_labels'].append(hyp_labels_batch[i])
         dataset_row['hyp_diarized_text'].append(hyp_diarized_text_batch[i])
-        # dataset_row['oracle_speakers'].append(oracle_speakers[i])
-        # dataset_row['deg_speakers'].append(deg_speakers[i])
+        dataset_row['hyp_oracle_labels'].append(hyp_oracle_labels[i])
+        dataset_row['hyp_deg_labels'].append(hyp_deg_labels[i])
         processed_dataset = processed_dataset.add_item(dataset_row)
 
     return processed_dataset
