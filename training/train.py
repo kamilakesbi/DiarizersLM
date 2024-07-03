@@ -21,7 +21,7 @@ def metrics(eval_pred):
 
 if __name__ == "__main__": 
 
-    dataset = load_dataset('kamilakesbi/fisher_subset_for_trl')
+    dataset = load_dataset('diarizers-community/fisher_processed')
 
     prompts_options = utils.PromptOptions()
     prompts_options.emit_input_length = 896
@@ -30,19 +30,23 @@ if __name__ == "__main__":
     prompts_options.prompt_prefix = ''
     prompts_options.completion_suffix = ''
 
+    dataset['train'] = dataset['train'].select(range(40))
+
     dataset['train'] = dataset['train'].map(
         lambda x: prepare_prompts_and_completions(x, prompts_options), 
         remove_columns=dataset['train'].column_names, 
+        batched=True, 
+        batch_size=1, 
         num_proc=1, 
-    )
+    )   
 
-    # dataset['train'] = dataset['train'].select(range(10))
     train_testvalid = dataset['train'].train_test_split(test_size=0.2, seed=0)
 
     dataset = DatasetDict({
             'train': train_testvalid['train'],
             'validation': train_testvalid['test'],
         })
+    
     train_split_name = 'train'
     val_split_name = 'validation'
 

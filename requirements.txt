@@ -7,3 +7,6 @@ flake8>=3.8.3
 datasets[audio]>=2.11.0
 pyannote.audio==3.2.0
 diarizationlm
+peft
+trl
+bitsandbytes

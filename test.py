@@ -1,5 +1,5 @@
 import torch
-from pipeline import DiarizersLmPipeline
+from inference import DiarizersLmPipeline
 from datasets import load_dataset
 import torch
 from scipy.io.wavfile import write
