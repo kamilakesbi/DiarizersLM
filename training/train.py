@@ -1,7 +1,7 @@
 from datasets import load_dataset
 from transformers import TrainingArguments
 from peft import LoraConfig, TaskType
-from trl import SFTTrainer
+from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers import BitsAndBytesConfig
@@ -10,11 +10,15 @@ from diarizationlm import utils
 
 from utils import prepare_prompts_and_completions
 from datasets import DatasetDict
-
+import numpy as np 
 
 def metrics(eval_pred): 
 
     logits, labels = eval_pred
+    predictions = np.argmax(logits, axis=-1)
+
+    labels = tokenizer.decode(labels[0], skip_special_tokens=True)
+    predictions = tokenizer.decode(predictions[0], skip_special_tokens=True)
 
     return eval_pred
 
@@ -85,6 +89,9 @@ if __name__ == "__main__":
         text = f"### Question: {example['prompt']}\n ### Answer: {example['completion']}"
         return [text]
 
+    # response_template = " ### Answer:"
+    # collator = DataCollatorForCompletionOnlyLM(response_template, tokenizer=tokenizer)
+
     trainer = SFTTrainer(
         model,
         tokenizer=tokenizer,
@@ -93,6 +100,9 @@ if __name__ == "__main__":
         eval_dataset=dataset['validation'], 
         peft_config=peft_config,
         compute_metrics=metrics, 
-        formatting_func=formatting_func
+        max_seq_length=2048,
+        formatting_func=formatting_func, 
+        # data_collator = collator, 
     )
+    trainer.train()
     trainer.evaluate()
