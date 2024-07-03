@@ -1,7 +1,7 @@
 from datasets import load_dataset
 from transformers import TrainingArguments
 from peft import LoraConfig, TaskType
-from trl import SFTTrainer
+from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers import BitsAndBytesConfig
@@ -10,20 +10,31 @@ from diarizationlm import utils
 
 from utils import prepare_prompts_and_completions
 from datasets import DatasetDict
-import numpy as np 
 
-def metrics(eval_pred): 
+# def metrics(eval_pred): 
 
-    logits, labels = eval_pred
-    predictions = np.argmax(logits, axis=-1)
+#     logits, labels = eval_pred
+#     predictions = np.argmax(logits, axis=-1)
 
-    labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
-    predictions = np.where(predictions != -100, predictions, tokenizer.pad_token_id)
+#     labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+#     predictions = np.where(predictions != -100, predictions, tokenizer.pad_token_id)
+    
+#     labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+#     predictions = tokenizer.batch_decode(predictions, skip_special_tokens=True)
 
-    labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
-    predictions = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+#     for i in range(len(labels)): 
 
-    return eval_pred
+#         prompt = labels[i].split('\n')[1].split('<|im_end|>')[0]
+#         completion = labels[i].split('\n')[3].split('<|im_end|>')[0]
+
+#         prompt_labels = extract_text_and_spk(prompt, utils.PromptOptions())[1]
+#         completion_labels = extract_text_and_spk(completion, utils.PromptOptions())[1]
+
+#         try: 
+#             predicted_completion = predictions[i].split('\n')[3].split('<|im_end|>')[0]
+#             predicted_labels = extract_text_and_spk(prompt, utils.PromptOptions())[1]
+
+#     return eval_pred
 
 
 if __name__ == "__main__": 
@@ -36,8 +47,6 @@ if __name__ == "__main__":
     prompts_options.prompt_suffix = ''
     prompts_options.prompt_prefix = ''
     prompts_options.completion_suffix = ''
-
-    dataset['train'] = dataset['train'].select(range(20))
 
     dataset['train'] = dataset['train'].map(
         lambda x: prepare_prompts_and_completions(x, prompts_options), 
@@ -54,8 +63,6 @@ if __name__ == "__main__":
             'validation': train_testvalid['test'],
         })
 
-    print(dataset)
-    
     train_split_name = 'train'
     val_split_name = 'validation'
 
@@ -76,24 +83,20 @@ if __name__ == "__main__":
 
     training_args = TrainingArguments(
         per_device_train_batch_size=1,
-        gradient_accumulation_steps=8,
+        gradient_accumulation_steps=4,
         per_device_eval_batch_size=1,
-        num_train_epochs=3,
+        num_train_epochs=5,
         do_eval=True,
         learning_rate=1e-3,
         warmup_ratio=0.1,
         logging_steps=10,
         gradient_checkpointing=True,
-        output_dir="checkpoints/",
+        output_dir="checkpoints/llama8_fine-tuned",
         push_to_hub=False,
         eval_accumulation_steps=1,
     )
 
     peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
-
-    def formatting_func(example):
-        text = f"### Question: {example['prompt']}\n ### Answer: {example['completion']}"
-        return [text]
 
     # response_template = " ### Answer:"
     # collator = DataCollatorForCompletionOnlyLM(response_template, tokenizer=tokenizer)
@@ -105,11 +108,8 @@ if __name__ == "__main__":
         train_dataset=dataset["train"],
         eval_dataset=dataset['validation'], 
         peft_config=peft_config,
-        compute_metrics=metrics, 
         max_seq_length=1024,
-
-        # formatting_func=formatting_func, 
-        # data_collator = collator, 
     )
-    # trainer.train()
-    trainer.evaluate()
+    trainer.train()
+
+    trainer.push_to_hub('kamilakesbi/diarizationlm_tuned')
