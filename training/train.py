@@ -1,7 +1,7 @@
 from datasets import load_dataset
 from transformers import TrainingArguments
 from peft import LoraConfig, TaskType
-from trl import SFTTrainer, DataCollatorForCompletionOnlyLM
+from trl import SFTTrainer
 
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from transformers import BitsAndBytesConfig
@@ -17,8 +17,11 @@ def metrics(eval_pred):
     logits, labels = eval_pred
     predictions = np.argmax(logits, axis=-1)
 
-    labels = tokenizer.decode(labels[0], skip_special_tokens=True)
-    predictions = tokenizer.decode(predictions[0], skip_special_tokens=True)
+    labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+    predictions = np.where(predictions != -100, predictions, tokenizer.pad_token_id)
+
+    labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+    predictions = tokenizer.batch_decode(predictions, skip_special_tokens=True)
 
     return eval_pred
 
@@ -34,7 +37,7 @@ if __name__ == "__main__":
     prompts_options.prompt_prefix = ''
     prompts_options.completion_suffix = ''
 
-    dataset['train'] = dataset['train'].select(range(40))
+    dataset['train'] = dataset['train'].select(range(20))
 
     dataset['train'] = dataset['train'].map(
         lambda x: prepare_prompts_and_completions(x, prompts_options), 
@@ -50,6 +53,8 @@ if __name__ == "__main__":
             'train': train_testvalid['train'],
             'validation': train_testvalid['test'],
         })
+
+    print(dataset)
     
     train_split_name = 'train'
     val_split_name = 'validation'
@@ -81,6 +86,7 @@ if __name__ == "__main__":
         gradient_checkpointing=True,
         output_dir="checkpoints/",
         push_to_hub=False,
+        eval_accumulation_steps=1,
     )
 
     peft_config = LoraConfig(task_type=TaskType.CAUSAL_LM, inference_mode=False, r=8, lora_alpha=32, lora_dropout=0.1)
@@ -100,9 +106,10 @@ if __name__ == "__main__":
         eval_dataset=dataset['validation'], 
         peft_config=peft_config,
         compute_metrics=metrics, 
-        max_seq_length=2048,
-        formatting_func=formatting_func, 
+        max_seq_length=1024,
+
+        # formatting_func=formatting_func, 
         # data_collator = collator, 
     )
-    trainer.train()
+    # trainer.train()
     trainer.evaluate()
