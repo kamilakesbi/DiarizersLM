@@ -3,17 +3,19 @@ import torchaudio
 from tqdm import tqdm
 import argparse
 from huggingface_hub import snapshot_download
-from datasets import Dataset, Audio
+from datasets import Dataset, Audio, DatasetDict
 import torchaudio.transforms as T
 
 
-
-def fisher_dataset_for_speaker_diarization(fpath="/data/fisher/data"): 
+def fisher_dataset_for_speaker_diarization(fpath="/data/fisher/data", split = 'train'): 
 
     txt_files = list()
     txt_filenames = list()
     sph_files = list()
     sph_filenames = list()
+
+    with open('/home/user/app/DiarizersLM/preprocessing/fisher_eval.txt', 'r') as file:
+        test_files = [line.strip() for line in file.readlines()]
 
     # get the audio and transcription directories -> no info about fisher directory structure required
     for (dirpath, dirnames, filenames) in os.walk(fpath):
@@ -33,7 +35,6 @@ def fisher_dataset_for_speaker_diarization(fpath="/data/fisher/data"):
         speakers = []
         transcripts = []
 
-
         # ignore non-transcription files
         if "readme" not in txt_filename and "doc" not in txt_filename:
             # get the corresponding audio file and load
@@ -44,45 +45,64 @@ def fisher_dataset_for_speaker_diarization(fpath="/data/fisher/data"):
             transform = T.Resample(8000, 16000)
             segment = transform(segment)
             audio_path = sph_files[sph_idx].split('.')[0] + '.wav'
-            torchaudio.save(uri = audio_path, src=segment, format = 'wav', sample_rate=16000)
+            
+            filename = audio_path.split('/')[-1].split('.')[0]
 
-            segment, sr = torchaudio.load(uri = audio_path, format='wav')
+            if (filename in test_files and split=='test') or (filename not in test_files and split=='train'): 
 
-            with open(file) as f:
-                for line in f:
-                    # only parse non-empty lines
-                    if line.strip():
-                        line = line.strip()
-                        # remove double spaces between columns in the transcription
-                        line = " ".join(line.split())
-                        if line.startswith("#"):
-                            continue
-                        # split the line as before, this time according to the new column headings
-                        start, end, speaker, transcript = line.split(" ", 3)
+                torchaudio.save(uri = audio_path, src=segment, format = 'wav', sample_rate=16000)
 
-                        timestamps_start.append(float(start))
-                        timestamps_end.append(float(end))
-                        speakers.append(speaker[0])
-                        transcripts.append(transcript)
-            yield {
-                "audio": {"path": audio_path, "array": segment[0] + segment[1], "sampling_rate": sr},
-                "timestamps_start": timestamps_start,
-                "timestamps_end": timestamps_end,
-                "speakers": speakers,
-                "transcripts": transcripts, 
-            }
+                segment, sr = torchaudio.load(uri = audio_path, format='wav')
+
+                with open(file) as f:
+                    for line in f:
+                        # only parse non-empty lines
+                        if line.strip():
+                            line = line.strip()
+                            # remove double spaces between columns in the transcription
+                            line = " ".join(line.split())
+                            if line.startswith("#"):
+                                continue
+                            # split the line as before, this time according to the new column headings
+                            start, end, speaker, transcript = line.split(" ", 3)
+
+                            timestamps_start.append(float(start))
+                            timestamps_end.append(float(end))
+                            speakers.append(speaker[0])
+                            transcripts.append(transcript)
+                yield {
+                    "audio": {"path": audio_path, "array": segment[0] + segment[1], "sampling_rate": sr},
+                    "timestamps_start": timestamps_start,
+                    "timestamps_end": timestamps_end,
+                    "speakers": speakers,
+                    "transcripts": transcripts, 
+                }
+
 
 if __name__ == "__main__":
 
-    # args = parser.parse_args()
     preprocess_cache_dir = '/data/fisher'
     hub_folder = 'kamilakesbi/fisher'
 
-    # if args.preprocess: 
-    dataset = Dataset.from_generator(
-        fisher_dataset_for_speaker_diarization, 
+    dataset = DatasetDict(
+        {
+            'train': [], 
+            'test': [], 
+        }
+    )
+
+    dataset['train'] = Dataset.from_generator(
+        fisher_dataset_for_speaker_diarization,
+        gen_kwargs={'fpath': "/data/fisher/data", 'split': 'train'},
         writer_batch_size=200,
         cache_dir=preprocess_cache_dir, 
     )
-    dataset = dataset.cast_column("audio", Audio(sampling_rate=16000))
+
+    dataset['test'] = Dataset.from_generator(
+        fisher_dataset_for_speaker_diarization,
+        gen_kwargs={'fpath': "/data/fisher/data", 'split': 'test'},
+        writer_batch_size=200,
+        cache_dir=preprocess_cache_dir, 
+    )
+
     dataset.push_to_hub(hub_folder, private=True)
