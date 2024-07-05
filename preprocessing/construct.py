@@ -14,7 +14,7 @@ def fisher_dataset_for_speaker_diarization(fpath="/data/fisher/data", split = 't
     sph_files = list()
     sph_filenames = list()
 
-    with open('/home/user/app/DiarizersLM/preprocessing/fisher_eval.txt', 'r') as file:
+    with open('preprocessing/fisher_eval.txt', 'r') as file:
         test_files = [line.strip() for line in file.readlines()]
 
     # get the audio and transcription directories -> no info about fisher directory structure required
