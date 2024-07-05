@@ -37,7 +37,7 @@ accelerate launch --num_processes 4 preprocessing/run.py \
     --diarizer_name_or_path "pyannote/speaker-diarization-3.1" \
     --attn_implementation 'sdpa' \
     --dtype 'bfloat16' \
-    --dataset_name 'kamilakesbi/fisher_full' \
+    --dataset_name 'diarizers-community/fisher' \
     --dataset_split_name 'train' \
     --num_proc 12 \
     --per_device_batch_size 8 \
@@ -54,8 +54,9 @@ python3 preprocessing/run.py \
     --diarizer_name_or_path "pyannote/speaker-diarization-3.1" \
     --attn_implementation 'sdpa' \
     --dtype 'bfloat16' \
-    --dataset_name 'kamilakesbi/fisher_full' \
+    --dataset_name 'diarizers-community/fisher' \
     --dataset_split_name 'train' \
+    --num_proc 12 \
     --per_device_batch_size 2 \
     --dataloader_num_workers 4 \
     --dtype "bfloat16" \
