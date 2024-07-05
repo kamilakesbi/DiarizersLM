@@ -217,10 +217,6 @@ if __name__ == '__main__':
                 num_proc=num_proc,
             )
 
-    # raw_dataset = raw_dataset.select(range(200))
-    # with accelerator.main_process_first(): 
-    #     raw_dataset = raw_dataset.map(compute_duration, num_proc=num_proc)
-    #     raw_dataset = raw_dataset.sort('duration')
 
     label_dataset = raw_dataset.select_columns(['timestamps_start', 'timestamps_end', 'speakers', 'transcripts'])
     audio_dataset = raw_dataset.select_columns(['audio'])
@@ -253,7 +249,7 @@ if __name__ == '__main__':
     audio_dataloader = accelerator.prepare(audio_dataloader)
     audio_batches = tqdm(audio_dataloader, disable=not accelerator.is_local_main_process)
 
-    processed_dataset = Dataset.from_dict({"ref_diarized_text": [], "ref_text": [], "ref_labels": [], "hyp_text": [], "ref_labels": []})
+    processed_dataset = Dataset.from_dict({"ref_text": [], "ref_spk": [], "hyp_text": [], "hyp_spk": [], "ref_spk_degraded": [], "hyp_spk_oracle":[]})
 
     logger.debug('Entering dataloder loop: ')
 
@@ -286,8 +282,8 @@ if __name__ == '__main__':
         # Orchestration: 
         start_time = time.perf_counter()
 
-        hyp_text_batch, hyp_labels_batch, hyp_diarized_text_batch = processor.orchestrate(transcriptions, diarization_segments)
-        ref_text_batch, ref_labels_batch, ref_diarized_text_batch = processor.get_references(labels_batch['transcripts'], labels_batch['speakers'])
+        hyp_text_batch, hyp_labels_batch = processor.orchestrate(transcriptions, diarization_segments)
+        ref_text_batch, ref_labels_batch = processor.get_references(labels_batch['transcripts'], labels_batch['speakers'])
         torch.cuda.synchronize()
 
         logger.debug('Orchestration : {}'.format(time.perf_counter() - start_time))
@@ -302,7 +298,6 @@ if __name__ == '__main__':
 
         hyp_text_batch = accelerator.gather_for_metrics(hyp_text_batch)
         hyp_labels_batch = accelerator.gather_for_metrics(hyp_labels_batch)
-        hyp_diarized_text_batch = accelerator.gather_for_metrics(hyp_diarized_text_batch)
         hyp_oracle_labels = accelerator.gather_for_metrics(hyp_oracle_labels)
         hyp_deg_speakers = accelerator.gather_for_metrics(hyp_deg_speakers)
 
@@ -312,12 +307,10 @@ if __name__ == '__main__':
 
         processed_dataset = add_batch_to_dataset(
             processed_dataset, 
-            ref_diarized_text_batch, 
             ref_text_batch, 
             ref_labels_batch, 
             hyp_text_batch, 
             hyp_labels_batch, 
-            hyp_diarized_text_batch, 
             hyp_oracle_labels, 
             hyp_deg_speakers
         )
@@ -330,9 +323,6 @@ if __name__ == '__main__':
             if accelerator.is_main_process:
                 if str(data_args.push_to_hub):
                     processed_dataset.push_to_hub(str(data_args.output_hub_repository), private=True)
-
-
-
 
 
 

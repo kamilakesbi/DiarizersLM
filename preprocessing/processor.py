@@ -135,16 +135,12 @@ class Processor:
             transcripts_batch.append(transcript_text.strip())
             labels_batch.append(word_labels)
 
-        for i in range(len(transcripts_batch)): 
-            diarized_transcript_batch.append(utils.create_diarized_text(transcripts_batch[i].split(), labels_batch[i].split()))
-
-        return transcripts_batch, labels_batch, diarized_transcript_batch
+        return transcripts_batch, labels_batch
 
     def get_references(self, ref_transcriptions, ref_speakers): 
         
         ref_texts_batch = []
         ref_labels_batch = []
-        ref_diarized_texts_batch = []
 
         for i, transcriptions in enumerate(ref_transcriptions):
             
@@ -162,9 +158,8 @@ class Processor:
 
             ref_texts_batch.append(ref_text)
             ref_labels_batch.append(ref_labels)
-            ref_diarized_texts_batch.append(ref_diarized_text)
 
-        return ref_texts_batch, ref_labels_batch, ref_diarized_texts_batch
+        return ref_texts_batch, ref_labels_batch
 
     def get_oracle_and_degraded_speakers(self, hyp_text_batch, hyp_labels_batch, ref_text_batch, ref_labels_batch): 
 

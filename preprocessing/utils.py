@@ -22,26 +22,22 @@ def compute_duration(batch):
 
 def add_batch_to_dataset(
     processed_dataset, 
-    ref_diarized_text_batch, 
     ref_text_batch, 
     ref_labels_batch, 
     hyp_text_batch, 
     hyp_labels_batch, 
-    hyp_diarized_text_batch, 
     hyp_oracle_labels, 
     hyp_deg_labels
 ): 
     
-    for i in range(len(ref_diarized_text_batch)): 
-        dataset_row = {"ref_diarized_text": [], "ref_text": [], "ref_labels": [], "hyp_text": [], "hyp_labels": [], "hyp_diarized_text": [], "hyp_deg_labels": [], "hyp_oracle_labels": []}
-        dataset_row['ref_diarized_text'].append(ref_diarized_text_batch[i])
+    for i in range(len(ref_text_batch)): 
+        dataset_row ={"ref_text": [], "ref_spk": [], "hyp_text": [], "hyp_spk": [], "ref_spk_degraded": [], "hyp_spk_oracle":[]}
         dataset_row['ref_text'].append(ref_text_batch[i])
-        dataset_row['ref_labels'].append(ref_labels_batch[i])
+        dataset_row['ref_spk'].append(ref_labels_batch[i])
         dataset_row['hyp_text'].append(hyp_text_batch[i])
-        dataset_row['hyp_labels'].append(hyp_labels_batch[i])
-        dataset_row['hyp_diarized_text'].append(hyp_diarized_text_batch[i])
-        dataset_row['hyp_oracle_labels'].append(hyp_oracle_labels[i])
-        dataset_row['hyp_deg_labels'].append(hyp_deg_labels[i])
+        dataset_row['hyp_spk'].append(hyp_labels_batch[i])
+        dataset_row['hyp_spk_oracle'].append(hyp_oracle_labels[i])
+        dataset_row['ref_spk_degraded'].append(hyp_deg_labels[i])
         processed_dataset = processed_dataset.add_item(dataset_row)
 
     return processed_dataset
