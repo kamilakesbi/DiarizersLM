@@ -84,25 +84,40 @@ if __name__ == "__main__":
     preprocess_cache_dir = '/data/fisher'
     hub_folder = 'kamilakesbi/fisher'
 
-    dataset = DatasetDict(
-        {
-            'train': [], 
-            'test': [], 
-        }
-    )
+    # Create the parser
+    parser = argparse.ArgumentParser()
+    # Add arguments
+    parser.add_argument('--download', default = False)
+    parser.add_argument('--local_fisher_dir', default= "/data/fisher/data")
+    parser.add_argument('--preprocess', default=False)
+    parser.add_argument('--preprocess_cache_dir', default='/data/fisher')
+    parser.add_argument('--hub_folder', default='kamilakesbi/fisher')
+    
+    args = parser.parse_args()
 
-    dataset['train'] = Dataset.from_generator(
-        fisher_dataset_for_speaker_diarization,
-        gen_kwargs={'fpath': "/data/fisher/data", 'split': 'train'},
-        writer_batch_size=200,
-        cache_dir=preprocess_cache_dir, 
-    )
+    if args.download: 
+        snapshot_download(repo_id="speech-seq2seq/fisher", repo_type="dataset", local_dir=args.local_fisher_dir)
 
-    dataset['test'] = Dataset.from_generator(
-        fisher_dataset_for_speaker_diarization,
-        gen_kwargs={'fpath': "/data/fisher/data", 'split': 'test'},
-        writer_batch_size=200,
-        cache_dir=preprocess_cache_dir, 
-    )
+    if args.preprocess: 
+        dataset = DatasetDict(
+            {
+                'train': [], 
+                'test': [], 
+            }
+        )
 
-    dataset.push_to_hub(hub_folder, private=True)
+        dataset['train'] = Dataset.from_generator(
+            fisher_dataset_for_speaker_diarization,
+            gen_kwargs={'fpath': args.local_fisher_dir, 'split': 'train'},
+            writer_batch_size=200,
+            cache_dir=args.preprocess_cache_dir, 
+        )
+
+        dataset['test'] = Dataset.from_generator(
+            fisher_dataset_for_speaker_diarization,
+            gen_kwargs={'fpath': args.local_fisher_dir, 'split': 'test'},
+            writer_batch_size=200,
+            cache_dir=args.preprocess_cache_dir, 
+        )
+
+        dataset.push_to_hub(hub_folder, private=True)
