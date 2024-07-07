@@ -218,7 +218,7 @@ if __name__ == '__main__':
             )
 
 
-    label_dataset = raw_dataset.select_columns(['timestamps_start', 'timestamps_end', 'speakers', 'transcripts'])
+    label_dataset = raw_dataset.select_columns(['timestamps_start', 'timestamps_end', 'speakers', 'transcripts', 'filename'])
     audio_dataset = raw_dataset.select_columns(['audio'])
 
     # Define Data Collators: 
@@ -249,7 +249,7 @@ if __name__ == '__main__':
     audio_dataloader = accelerator.prepare(audio_dataloader)
     audio_batches = tqdm(audio_dataloader, disable=not accelerator.is_local_main_process)
 
-    processed_dataset = Dataset.from_dict({"ref_text": [], "ref_spk": [], "hyp_text": [], "hyp_spk": [], "ref_spk_degraded": [], "hyp_spk_oracle":[]})
+    processed_dataset = Dataset.from_dict({"ref_text": [], "ref_spk": [], "hyp_text": [], "hyp_spk": [], "ref_spk_degraded": [], "hyp_spk_oracle":[], 'filename': []})
 
     logger.debug('Entering dataloder loop: ')
 
@@ -296,6 +296,7 @@ if __name__ == '__main__':
         
         start_time = time.perf_counter()
 
+        filename_batch = accelerator.gather_for_metrics(labels_batch['filename'])
         hyp_text_batch = accelerator.gather_for_metrics(hyp_text_batch)
         hyp_labels_batch = accelerator.gather_for_metrics(hyp_labels_batch)
         hyp_oracle_labels = accelerator.gather_for_metrics(hyp_oracle_labels)
@@ -312,7 +313,8 @@ if __name__ == '__main__':
             hyp_text_batch, 
             hyp_labels_batch, 
             hyp_oracle_labels, 
-            hyp_deg_speakers
+            hyp_deg_speakers, 
+            filename_batch
         )
         torch.cuda.synchronize()
         start_time = time.perf_counter()
