@@ -31,6 +31,8 @@ python3 construct_fisher.py \
 
 ## Process Fisher dataset: 
 
+Generate hypothesis and reference texts / speaker labels: 
+
 ```
 accelerate launch --num_processes 4 preprocessing/run.py \
     --asr_name_or_path "distil-whisper/distil-large-v3" \
@@ -63,6 +65,16 @@ python3 preprocessing/run.py \
     --push_to_hub \
     --output_hub_repository "kamilakesbi/processed_fisher" \
     --log_file_name "bs_2_num_workers_4.log"
+```
+
+Generate oracle and degraded speaker labels: 
+
+```
+python3 preprocessing/run_oracle_deg.py \
+    --dataset_name 'kamilakesbi/processed_fisher1' \
+    --num_proc 24 \
+    --push_to_hub \
+    --output_hub_repository "kamilakesbi/processed_fisher" \
 ```
 
 ## prepare_data: 

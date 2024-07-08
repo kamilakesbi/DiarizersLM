@@ -1,4 +1,4 @@
-from datasets import load_dataset, Dataset, Audio
+from datasets import load_dataset, Dataset
 from diarizationlm import utils
 import torch 
 from transformers import WhisperProcessor, WhisperForConditionalGeneration, WhisperTokenizer

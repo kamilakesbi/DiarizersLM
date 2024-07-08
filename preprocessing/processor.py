@@ -190,3 +190,30 @@ class Processor:
                 deg_speakers.append('')
         
         return oracle_speakers, deg_speakers
+    
+
+def add_oracle_and_deg_labels(batch):
+
+    try: 
+        batch['ref_spk_degraded'] = [utils.transcript_preserving_speaker_transfer(
+                        src_text=batch['hyp_text'][0],
+                        src_spk=batch['hyp_spk'][0],
+                        tgt_text=batch['ref_text'][0],
+                        tgt_spk=batch['ref_spk'][0],
+                    )]
+    except: 
+        print('exception')
+        batch['ref_spk_degraded'] = ['']
+        
+    try: 
+        batch['hyp_spk_oracle'] = [utils.transcript_preserving_speaker_transfer(
+                        src_text=batch['ref_text'][0],
+                        src_spk=batch['ref_spk'][0],
+                        tgt_text=batch['hyp_text'][0],
+                        tgt_spk=batch['hyp_spk'][0],
+                    )]
+    except: 
+        print('exception')
+        batch['hyp_spk_oracle'] = ['']
+
+    return batch
