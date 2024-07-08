@@ -90,7 +90,7 @@ class Processor:
             transcript_text = ''
             for sentence_with_timestamps in sentences_with_timestamps:
                 start_timestamp, end_timestamp = sentence_with_timestamps['timestamp']
-                sentence = self.normalizer.normalize(sentence_with_timestamps['text'].strip())
+                sentence = self.normalizer.normalize(sentence_with_timestamps['text']).replace(",", "").replace(".", "").replace("_", "").strip()
                 transcript_text += sentence + ' '
                 # List of segments that overlap with the current word
                 overlap_segments = [segment for segment in diarization_segment if segment['segment']['end'] >= start_timestamp and segment['segment']['start'] <= end_timestamp]
@@ -151,7 +151,7 @@ class Processor:
             ref_diarized_text = ''
             for index, transcript in enumerate(transcriptions):
                 ref_diarized_text += self.speaker_prefix + speakers[index] + self.speaker_suffix + ' '
-                ref_diarized_text += self.normalizer.normalize(transcript).strip()
+                ref_diarized_text += self.normalizer.normalize(transcript).replace(",", "").replace(".", "").replace("_", "").strip()
                 ref_diarized_text += ' '
 
             ref_text, ref_labels = utils.extract_text_and_spk(ref_diarized_text, po=self.prompts_options)
@@ -176,7 +176,7 @@ class Processor:
                 ))
             except: 
                 print('exception')
-                deg_speakers.append('')
+                deg_speakers.append('') 
             
             try: 
                 deg_speakers.append(utils.transcript_preserving_speaker_transfer(
@@ -185,7 +185,7 @@ class Processor:
                             tgt_text=ref_text_batch[i],
                             tgt_spk=ref_labels_batch[i],
                 ))
-            except: 
+            except:
                 print('exception')
                 deg_speakers.append('')
         

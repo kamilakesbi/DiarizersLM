@@ -249,7 +249,7 @@ if __name__ == '__main__':
     audio_dataloader = accelerator.prepare(audio_dataloader)
     audio_batches = tqdm(audio_dataloader, disable=not accelerator.is_local_main_process)
 
-    processed_dataset = Dataset.from_dict({"ref_text": [], "ref_spk": [], "hyp_text": [], "hyp_spk": [], "ref_spk_degraded": [], "hyp_spk_oracle":[], 'filename': []})
+    processed_dataset = Dataset.from_dict({"ref_text": [], "ref_spk": [], "hyp_text": [], "hyp_spk": [], 'filename': []})
 
     logger.debug('Entering dataloder loop: ')
 
@@ -287,21 +287,15 @@ if __name__ == '__main__':
         torch.cuda.synchronize()
 
         logger.debug('Orchestration : {}'.format(time.perf_counter() - start_time))
-        start_time = time.perf_counter()
-
-        hyp_oracle_labels, hyp_deg_speakers = processor.get_oracle_and_degraded_speakers(hyp_text_batch, hyp_labels_batch, ref_text_batch, ref_labels_batch)
+    
         torch.cuda.synchronize()
-
-        logger.debug('Apply TPST algorithm : {}'.format(time.perf_counter() - start_time))
         
         start_time = time.perf_counter()
 
         filename_batch = accelerator.gather_for_metrics(labels_batch['filename'])
         hyp_text_batch = accelerator.gather_for_metrics(hyp_text_batch)
         hyp_labels_batch = accelerator.gather_for_metrics(hyp_labels_batch)
-        hyp_oracle_labels = accelerator.gather_for_metrics(hyp_oracle_labels)
-        hyp_deg_speakers = accelerator.gather_for_metrics(hyp_deg_speakers)
-
+        
         torch.cuda.synchronize()
 
         logger.debug('Gather for metrics: {}'.format(time.perf_counter() - start_time))
@@ -312,8 +306,6 @@ if __name__ == '__main__':
             ref_labels_batch, 
             hyp_text_batch, 
             hyp_labels_batch, 
-            hyp_oracle_labels, 
-            hyp_deg_speakers, 
             filename_batch
         )
         torch.cuda.synchronize()

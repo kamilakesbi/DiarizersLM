@@ -26,19 +26,19 @@ def add_batch_to_dataset(
     ref_labels_batch, 
     hyp_text_batch, 
     hyp_labels_batch, 
-    hyp_oracle_labels, 
-    hyp_deg_labels, 
+    # hyp_oracle_labels, 
+    # hyp_deg_labels, 
     filename_batch
 ): 
     
     for i in range(len(ref_text_batch)): 
-        dataset_row ={"ref_text": [], "ref_spk": [], "hyp_text": [], "hyp_spk": [], "ref_spk_degraded": [], "hyp_spk_oracle":[], 'filename': []}
+        dataset_row ={"ref_text": [], "ref_spk": [], "hyp_text": [], "hyp_spk": [], 'filename': []}
         dataset_row['ref_text'].append(ref_text_batch[i])
         dataset_row['ref_spk'].append(ref_labels_batch[i])
         dataset_row['hyp_text'].append(hyp_text_batch[i])
         dataset_row['hyp_spk'].append(hyp_labels_batch[i])
-        dataset_row['hyp_spk_oracle'].append(hyp_oracle_labels[i])
-        dataset_row['ref_spk_degraded'].append(hyp_deg_labels[i])
+        # dataset_row['hyp_spk_oracle'].append(hyp_oracle_labels[i])
+        # dataset_row['ref_spk_degraded'].append(hyp_deg_labels[i])
         dataset_row['filename'].append(filename_batch[i])
         processed_dataset = processed_dataset.add_item(dataset_row)
 

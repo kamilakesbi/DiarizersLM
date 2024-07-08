@@ -44,8 +44,8 @@ accelerate launch --num_processes 4 preprocessing/run.py \
     --dataloader_num_workers 4 \
     --dtype "bfloat16" \
     --push_to_hub \
-    --output_hub_repository "kamilakesbi/processed_fisher" \
-    --log_file_name "bs_8_num_workers_4.log"
+    --output_hub_repository "kamilakesbi/processed_fisher1" \
+    --log_file_name "bs_4_num_workers_4.log"
 ```
 
 ```
