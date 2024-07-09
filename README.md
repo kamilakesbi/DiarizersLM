@@ -26,7 +26,7 @@ python3 construct_fisher.py \
     --preprocess \
     --local_fisher_dir=/data/fisher/data \
     --preprocess_cache_dir=/data/fisher \
-    --hub_folder=kamilakesbi/fisher_full
+    --hub_folder=diarizers-community/fisher
 ```
 
 ## Process Fisher dataset: 
@@ -39,42 +39,28 @@ accelerate launch --num_processes 4 preprocessing/run.py \
     --diarizer_name_or_path "pyannote/speaker-diarization-3.1" \
     --attn_implementation 'sdpa' \
     --dtype 'bfloat16' \
-    --dataset_name 'kamilakesbi/fisher' \
-    --dataset_split_name 'train' \
+    --dataset_name 'diarizers-community/fisher' \
+    --dataset_split_name 'test' \
     --num_proc 12 \
     --per_device_batch_size 4 \
     --dataloader_num_workers 4 \
     --dtype "bfloat16" \
     --push_to_hub \
-    --output_hub_repository "kamilakesbi/processed_fisher1" \
+    --output_hub_repository "diarizers-community/processed_fisher_for_diarizationlm" \
     --log_file_name "bs_4_num_workers_4.log"
 ```
 
-```
-python3 preprocessing/run.py \
-    --asr_name_or_path "distil-whisper/distil-large-v3" \
-    --diarizer_name_or_path "pyannote/speaker-diarization-3.1" \
-    --attn_implementation 'sdpa' \
-    --dtype 'bfloat16' \
-    --dataset_name 'kamilakesbi/fisher' \
-    --dataset_split_name 'train' \
-    --num_proc 12 \
-    --per_device_batch_size 2 \
-    --dataloader_num_workers 4 \
-    --dtype "bfloat16" \
-    --push_to_hub \
-    --output_hub_repository "kamilakesbi/processed_fisher" \
-    --log_file_name "bs_2_num_workers_4.log"
-```
+
 
 Generate oracle and degraded speaker labels: 
 
 ```
 python3 preprocessing/run_oracle_deg.py \
-    --dataset_name 'kamilakesbi/processed_fisher1' \
+    --dataset_name 'diarizers-community/processed_fisher_for_diarizationlm' \
+    --dataset_split_name 'train' \
     --num_proc 24 \
     --push_to_hub \
-    --output_hub_repository "kamilakesbi/processed_fisher" \
+    --output_hub_repository "diarizers-community/processed_fisher_for_diarizationlm" \
 ```
 
 ## prepare_data: 

@@ -6,7 +6,7 @@ before running this script.
 """
 
 import config
-import dataprep
+import train_unsloth.prepare_for_unsloth as prepare_for_unsloth
 import torch
 from transformers import TrainingArguments
 from trl import SFTTrainer
@@ -18,7 +18,7 @@ def run_training():
   ############################################################################
   # Get dataset
   ############################################################################
-  dataset = dataprep.build_dataset()
+  dataset = prepare_for_unsloth.build_dataset()
 
   ############################################################################
   # Get model

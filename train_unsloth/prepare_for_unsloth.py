@@ -1,7 +1,10 @@
 import config
 from datasets import Dataset, disable_caching, concatenate_datasets
 from diarizationlm import utils
-from datasets import load_dataset, DatasetDict
+from datasets import load_dataset
+import json 
+import jsonlines
+
 
 def formatting_prompts_func(example):
   return {"text": example["prompt"] + example["target"]}
@@ -58,18 +61,39 @@ def build_dataset():
 
 if __name__ == '__main__': 
 
-    fisher_processed = load_dataset('diarizers-community/fisher_processed')
+    def convert_to_diarizationlm_compatible_json(json_path): 
+        # Read and parse the JSONL file
+        data = {
+        'utterances':[], 
+        }
+                
+        with open(json_path, 'r') as jsonl_file:
+            for line in jsonl_file:
+
+                line = json.loads(line)
+                line['ref_text'] = line['ref_text'][0]
+                line['ref_spk'] = line['ref_spk'][0]
+                line['hyp_text'] = line['hyp_text'][0]
+                line['hyp_spk'] = line['hyp_spk'][0]
+                line['ref_spk_degraded'] = line['ref_spk_degraded'][0]
+                line['hyp_spk_oracle'] = line['hyp_spk_oracle'][0]
+                line['utterance_id'] = line['utterance_id'][0]
+                data['utterances'].append(line)
+
+        # Write the data to a JSON file
+        with open(json_path, 'w') as json_file:
+            json.dump(data, json_file, indent=2)
+
+
+    test_json_path = 'fisher_processed_test.json'
+    train_json_path = 'fisher_processed_train.json'
     
-    train_testvalid = fisher_processed['train'].train_test_split(test_size=0.2, seed=0)
+    fisher_processed = load_dataset('diarizers-community/processed_fisher_for_diarizationlm', num_proc=12)
 
-    fisher_processed = DatasetDict({
-            'train': train_testvalid['train'],
-            'validation': train_testvalid['test'],
-        })
+    fisher_processed['train'].to_json(train_json_path)
+    fisher_processed['test'].to_json(test_json_path)
 
-    fisher_processed['train'].to_json('train_unsloth/fisher_processed_train.json')
-    fisher_processed['validation'].to_json('train_unsloth/fisher_processed_validation.json')
+    convert_to_diarizationlm_compatible_json(train_json_path)
+    convert_to_diarizationlm_compatible_json(test_json_path)
 
     train_dataset, eval_dataset = build_dataset()
-
-    

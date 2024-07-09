@@ -15,6 +15,15 @@ class DataArguments:
         metadata={"help": "The name of the dataset to use (via the datasets library)."},
     )
 
+    dataset_split_name: str = field(
+        default="train",
+        metadata={
+            "help": (
+                "The name of the data set splits to use (via the datasets library)."
+            )
+        },
+    )
+
     num_proc: int = field(
         default=None,
         metadata={"help": "Number of workers used to load the dataset"},
@@ -34,8 +43,8 @@ class DataArguments:
 
 if __name__ == '__main__': 
 
-    parser = HfArgumentParser((DataArguments))
-    data_args = parser.parse_args_into_dataclasses()
+    parser = HfArgumentParser(DataArguments)
+    data_args = parser.parse_args_into_dataclasses()[0]
 
     dataset = load_dataset(data_args.dataset_name, num_proc=12)
 
@@ -44,5 +53,5 @@ if __name__ == '__main__':
         num_proc=data_args.num_proc
     )
 
-    if data_args.push_to_hub: 
+    if data_args.push_to_hub:
         dataset.push_to_hub(data_args.output_hub_repository, private=True)

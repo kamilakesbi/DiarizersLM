@@ -74,7 +74,7 @@ def fisher_dataset_for_speaker_diarization(fpath="/data/fisher/data", split = 't
                     "timestamps_end": timestamps_end,
                     "speakers": speakers,
                     "transcripts": transcripts, 
-                    "filename": filename, 
+                    "utterance_id": filename, 
                 }
 
 

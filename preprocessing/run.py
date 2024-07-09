@@ -218,7 +218,7 @@ if __name__ == '__main__':
             )
 
 
-    label_dataset = raw_dataset.select_columns(['timestamps_start', 'timestamps_end', 'speakers', 'transcripts', 'filename'])
+    label_dataset = raw_dataset.select_columns(['timestamps_start', 'timestamps_end', 'speakers', 'transcripts', 'utterance_id'])
     audio_dataset = raw_dataset.select_columns(['audio'])
 
     # Define Data Collators: 
@@ -249,7 +249,7 @@ if __name__ == '__main__':
     audio_dataloader = accelerator.prepare(audio_dataloader)
     audio_batches = tqdm(audio_dataloader, disable=not accelerator.is_local_main_process)
 
-    processed_dataset = Dataset.from_dict({"ref_text": [], "ref_spk": [], "hyp_text": [], "hyp_spk": [], 'filename': []})
+    processed_dataset = Dataset.from_dict({"ref_text": [], "ref_spk": [], "hyp_text": [], "hyp_spk": [], 'utterance_id': []})
 
     logger.debug('Entering dataloder loop: ')
 
@@ -292,7 +292,7 @@ if __name__ == '__main__':
         
         start_time = time.perf_counter()
 
-        filename_batch = accelerator.gather_for_metrics(labels_batch['filename'])
+        filename_batch = accelerator.gather_for_metrics(labels_batch['utterance_id'])
         hyp_text_batch = accelerator.gather_for_metrics(hyp_text_batch)
         hyp_labels_batch = accelerator.gather_for_metrics(hyp_labels_batch)
         
@@ -314,9 +314,10 @@ if __name__ == '__main__':
         if step % 10 == 0: 
             accelerator.wait_for_everyone()
 
-            if accelerator.is_main_process:
-                if str(data_args.push_to_hub):
-                    processed_dataset.push_to_hub(str(data_args.output_hub_repository), private=True)
+    if accelerator.is_main_process:
+        if str(data_args.push_to_hub):
+            processed_dataset.push_to_hub(str(data_args.output_hub_repository), split=data_args.dataset_split_name, private=True)
+
 
 
 
