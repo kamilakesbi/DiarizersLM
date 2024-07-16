@@ -68,8 +68,12 @@ class Processor:
 
     def transcript(self, whisper_inputs): 
 
-        asr_model_out = self.asr_model.generate(**whisper_inputs, return_timestamps=True)
-        transcripts = self.asr_processor.batch_decode(asr_model_out, output_offsets=True, skip_special_tokens=True, normalize = True)
+        asr_model_out = self.asr_model.generate(**whisper_inputs, return_timestamps=True, return_segments = True)
+        transcripts = self.asr_processor.batch_decode(asr_model_out['sequences'], output_offsets=True, skip_special_tokens=True, normalize = True)
+
+        # fix while waiting for https://github.com/huggingface/transformers/pull/32003 to be merged: 
+        for i in range(len(transcripts[0]['offsets'])):
+            transcripts[0]['offsets'][i]['timestamp'] = (asr_model_out['segments'][0][i]['start'].item(), asr_model_out['segments'][0][i]['end'].item())
 
         return transcripts
 
