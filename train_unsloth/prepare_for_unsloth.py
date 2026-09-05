@@ -3,7 +3,6 @@ from datasets import Dataset, disable_caching, concatenate_datasets
 from diarizationlm import utils
 from datasets import load_dataset
 import json 
-import jsonlines
 
 
 def formatting_prompts_func(example):
@@ -43,7 +42,7 @@ def build_dataset():
     disable_caching()
     all_datasets = []
     for data_name in config.TRAINING_INPUT:
-        data_path, data_repeat = config.TRAINING_INPUT[data_name]
+        data_path, data_repeat = config.EVAL_INPUTS[data_name]
         all_datasets.extend([build_dataset_single_source(data_path)] * data_repeat)
     dataset = concatenate_datasets(all_datasets)
     dataset = dataset.shuffle(seed=42)
@@ -54,7 +53,7 @@ def build_dataset():
         data_path, data_repeat = config.TRAINING_INPUT[data_name]
         all_datasets.extend([build_dataset_single_source(data_path)] * data_repeat)
     dataset = concatenate_datasets(all_datasets)
-    eval_dataset = dataset
+    eval_dataset = dataset.map(formatting_prompts_func)
 
     return train_dataset, eval_dataset
 

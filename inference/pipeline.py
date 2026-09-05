@@ -16,18 +16,18 @@ class DiarizersLmPipeline:
         self,
         asr_pipeline,
         diarization_pipeline,
-        # llm_pipeline, 
+        llm_pipeline,
     ):
         self.asr_pipeline = asr_pipeline
         self.sampling_rate = asr_pipeline.feature_extractor.sampling_rate
         self.diarization_pipeline = diarization_pipeline
 
         self.prompts_options = utils.PromptOptions()
-        # self.llm_pipeline = llm_pipeline
-        # self.terminators = [
-        #     llm_pipeline.tokenizer.eos_token_id,
-        #     llm_pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")
-        # ]
+        self.llm_pipeline = llm_pipeline
+        self.terminators = [llm_pipeline.tokenizer.eos_token_id]
+        eot_id = llm_pipeline.tokenizer.convert_tokens_to_ids("<|eot_id|>")
+        if eot_id != llm_pipeline.tokenizer.unk_token_id:
+            self.terminators.append(eot_id)
         self.max_new_tokens = 4096
 
     @classmethod
@@ -43,26 +43,33 @@ class DiarizersLmPipeline:
         **kwargs,
     ):
 
+        device = kwargs.pop("device", None)
+        pipeline_kwargs = dict(kwargs)
+        if device is not None:
+            pipeline_kwargs["device"] = device
         asr_pipeline = pipeline(
             "automatic-speech-recognition",
             model=asr_model,
             chunk_length_s=chunk_length_s,
             token=use_auth_token,
-            **kwargs,
+            **pipeline_kwargs,
         )
         diarization_pipeline = Pipeline.from_pretrained(diarizer_model, use_auth_token=use_auth_token)
-        if 'device' in kwargs: 
-            diarization_pipeline.to(torch.device(kwargs['device']))
+        if device is not None:
+            diarization_pipeline.to(torch.device(device))
         
-        # llm_model = pipeline(
-        #     "text-generation",
-        #     model="meta-llama/Meta-Llama-3-8B-Instruct",
-        #     model_kwargs={"torch_dtype": torch.bfloat16, 'attn_implementation': attn_implementation},
-        #     token=use_auth_token,
-        #     **kwargs,
-        # )
+        model_kwargs = {}
+        if attn_implementation is not None:
+            model_kwargs["attn_implementation"] = attn_implementation
+        llm_pipeline = pipeline(
+            "text-generation",
+            model=llm_model,
+            token=use_auth_token,
+            model_kwargs=model_kwargs,
+            **pipeline_kwargs,
+        )
 
-        return cls(asr_pipeline, diarization_pipeline)
+        return cls(asr_pipeline, diarization_pipeline, llm_pipeline)
     
     def __call__( 
             self,        
@@ -79,8 +86,7 @@ class DiarizersLmPipeline:
         print('Generate completions: ')
         completions = self.generate_completions(prompts)
         
-        # print('Post process completions: ')
-        # output = self.post_process(completions, hyp_text, hyp_labels)
+        output = self.post_process(completions, hyp_text, hyp_labels)
 
         return output
 
@@ -113,6 +119,8 @@ class DiarizersLmPipeline:
         # diarizer output may contain consecutive segments from the same speaker (e.g. {(0 -> 1, speaker_1), (1 -> 1.5, speaker_1), ...})
         # we combine these segments to give overall timestamps for each speaker's turn (e.g. {(0 -> 1.5, speaker_1), ...})
         new_segments = []
+        if not segments:
+            raise ValueError("The diarization model returned no speaker segments.")
         prev_segment = cur_segment = segments[0]
 
         for i in range(1, len(segments)):
@@ -175,9 +183,9 @@ class DiarizersLmPipeline:
                 gap_start_index = np.argmin(gap_to_start)
 
                 if gap_to_end[gap_end_index] <= gap_to_start[gap_start_index]: 
-                    label = str(int(gap_to_end[gap_end_index]['speaker'][-1]) + 1)
+                    label = str(int(new_segments[gap_end_index]['speaker'].rsplit("_", 1)[-1]) + 1)
                 else: 
-                    label = str(int(gap_to_start[gap_start_index]['speaker'][-1]) + 1)
+                    label = str(int(new_segments[gap_start_index]['speaker'].rsplit("_", 1)[-1]) + 1)
 
             nb_words_in_sentence = len(sentence.strip().split(' '))
 
@@ -286,6 +294,7 @@ class DiarizersLmPipeline:
                     "containing the sampling_rate associated with that array"
                 )
 
+            inputs = dict(inputs)
             _inputs = inputs.pop("raw", None)
             if _inputs is None:
                 # Remove path which will not be used from `datasets`.

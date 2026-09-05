@@ -176,7 +176,7 @@ if __name__ == '__main__':
         token=True, 
         low_cpu_mem_usage=True,
         torch_dtype=torch_dtype,
-        attn_implementation=str(model_args.attn_implementation), 
+        attn_implementation=model_args.attn_implementation,
     ).to(torch.device(device))
 
     # Load diarization pipeline: 
@@ -315,9 +315,8 @@ if __name__ == '__main__':
             accelerator.wait_for_everyone()
 
     if accelerator.is_main_process:
-        if str(data_args.push_to_hub):
+        if data_args.push_to_hub:
             processed_dataset.push_to_hub(str(data_args.output_hub_repository), split=data_args.dataset_split_name, private=True)
-
 
 
 
