@@ -6,7 +6,7 @@ from datasets import Dataset, Audio, DatasetDict
 import torchaudio.transforms as T
 
 
-def fisher_dataset_for_speaker_diarization(fpath="/data/fisher/data", split = 'train'): 
+def fisher_dataset_for_speaker_diarization(fpath="./fisher/data", split='train'):
 
     txt_files = list()
     txt_filenames = list()
@@ -80,25 +80,24 @@ def fisher_dataset_for_speaker_diarization(fpath="/data/fisher/data", split = 't
 
 if __name__ == "__main__":
 
-    preprocess_cache_dir = '/data/fisher'
-    hub_folder = 'kamilakesbi/fisher'
-
     # Create the parser
     parser = argparse.ArgumentParser()
     # Add arguments
-    parser.add_argument('--download', default = False)
-    parser.add_argument('--local_fisher_dir', default= "/data/fisher/data")
-    parser.add_argument('--preprocess', default=True)
-    parser.add_argument('--preprocess_cache_dir', default='/data/fisher')
-    parser.add_argument('--hub_folder', default='kamilakesbi/fisher')
+    parser.add_argument('--download', action="store_true")
+    parser.add_argument('--local_fisher_dir', required=True)
+    parser.add_argument('--preprocess', action="store_true")
+    parser.add_argument('--preprocess_cache_dir', required=True)
+    parser.add_argument('--hub_folder', required=True)
     
     args = parser.parse_args()
 
-    # if args.download: 
-    #     snapshot_download(repo_id="speech-seq2seq/fisher", repo_type="dataset", local_dir=args.local_fisher_dir)
+    if args.download:
+        raise NotImplementedError(
+            "Automatic Fisher download is not supported. Obtain the licensed corpus manually."
+        )
+    if not args.preprocess:
+        parser.error("Specify --preprocess after providing an unpacked Fisher corpus.")
 
-    # if args.preprocess: 
-    
     dataset = DatasetDict(
         {
             'train': [], 

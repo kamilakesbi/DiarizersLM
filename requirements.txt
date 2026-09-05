@@ -1,4 +1,5 @@
 numpy==1.26.1
+absl-py==2.1.0
 accelerate>=0.14.0
 transformers>=4.40.0
 black==22.8
@@ -10,3 +11,9 @@ diarizationlm
 peft
 trl
 bitsandbytes
+torchaudio==2.5.1
+tqdm==4.67.1
+psutil==6.1.1
+scipy==1.14.1
+jsonlines==4.0.0
+unsloth==2025.2.15

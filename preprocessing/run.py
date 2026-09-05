@@ -164,6 +164,7 @@ if __name__ == '__main__':
         kwargs_handlers=[kwargs],
     )
     device = accelerator.device
+    is_cuda = device.type == "cuda"
 
     # Load prompt options:
     prompts_options = utils.PromptOptions()
@@ -267,7 +268,9 @@ if __name__ == '__main__':
 
         diarization_segments = processor.get_diarization_segments(diarizer_inputs)
         # block async cpu
-        torch.cuda.synchronize()
+        if is_cuda:
+            if is_cuda:
+                torch.cuda.synchronize()
         logger.debug('Diarization time: {}'.format(time.perf_counter() - start_time))
 
         # Transcription:
@@ -276,7 +279,8 @@ if __name__ == '__main__':
         whisper_inputs = audio_batch['whisper_inputs']
         whisper_inputs.input_features = whisper_inputs.to(device, dtype=torch_dtype)
         transcriptions = processor.transcript(whisper_inputs)
-        torch.cuda.synchronize()
+        if is_cuda:
+            torch.cuda.synchronize()
         logger.debug('Transcription: {}'.format(time.perf_counter() - start_time))
 
         # Orchestration: 
@@ -284,11 +288,13 @@ if __name__ == '__main__':
 
         hyp_text_batch, hyp_labels_batch = processor.orchestrate(transcriptions, diarization_segments)
         ref_text_batch, ref_labels_batch = processor.get_references(labels_batch['transcripts'], labels_batch['speakers'])
-        torch.cuda.synchronize()
+        if is_cuda:
+            torch.cuda.synchronize()
 
         logger.debug('Orchestration : {}'.format(time.perf_counter() - start_time))
     
-        torch.cuda.synchronize()
+        if is_cuda:
+            torch.cuda.synchronize()
         
         start_time = time.perf_counter()
 
@@ -296,7 +302,8 @@ if __name__ == '__main__':
         hyp_text_batch = accelerator.gather_for_metrics(hyp_text_batch)
         hyp_labels_batch = accelerator.gather_for_metrics(hyp_labels_batch)
         
-        torch.cuda.synchronize()
+        if is_cuda:
+            torch.cuda.synchronize()
 
         logger.debug('Gather for metrics: {}'.format(time.perf_counter() - start_time))
 
@@ -317,7 +324,5 @@ if __name__ == '__main__':
     if accelerator.is_main_process:
         if data_args.push_to_hub:
             processed_dataset.push_to_hub(str(data_args.output_hub_repository), split=data_args.dataset_split_name, private=True)
-
-
 
 
