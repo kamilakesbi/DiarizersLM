@@ -1,10 +1,10 @@
 # DataPrep
 TRAINING_INPUT = {
-    "FISHER": ("/home/user/app/DiarizersLM/train_unsloth/fisher_processed_train.json", 1),
+    "FISHER": ("fisher_processed_train.json", 1),
 }
 
 EVAL_INPUTS = {
-    "FISHER": ("/home/user/app/DiarizersLM/train_unsloth/fisher_processed_validation.json", 1),
+    "FISHER": ("fisher_processed_validation.json", 1),
 }
 EMIT_INPUT_LENGTH = 6000
 EMIT_TARGET_LENGTH = 6000
@@ -13,7 +13,7 @@ PROMPT_SUFFIX = " --> "
 COMPLETION_SUFFIX = " [eod]"
 
 # Train
-RESUME_FROM_CHECKPOINT = True
+RESUME_FROM_CHECKPOINT = False
 MODEL_NAME = "unsloth/llama-3-8b-Instruct-bnb-4bit"
 LORA_RANK = 64
 MAX_SEQ_LENGTH = 4096

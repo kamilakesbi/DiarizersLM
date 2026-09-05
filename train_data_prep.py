@@ -8,7 +8,7 @@ import json
 from diarizationlm import utils
 
 FLAGS = flags.FLAGS
-flags.DEFINE_string("input", "/home/user/app/DiarizersLM/example_data.json", "Comma-separated list of json files")
+flags.DEFINE_string("input", "example_data.json", "Comma-separated list of json files")
 flags.DEFINE_string("output", "test.json", "Output file.")
 flags.DEFINE_enum(
     "output_type",

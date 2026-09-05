@@ -18,7 +18,7 @@ def run_training():
   ############################################################################
   # Get dataset
   ############################################################################
-  dataset = prepare_for_unsloth.build_dataset()
+  train_dataset, eval_dataset = prepare_for_unsloth.build_dataset()
 
   ############################################################################
   # Get model
@@ -57,7 +57,8 @@ def run_training():
   trainer = SFTTrainer(
       model=model,
       tokenizer=tokenizer,
-      train_dataset=dataset,
+      train_dataset=train_dataset,
+      eval_dataset=eval_dataset,
       dataset_text_field="text",
       max_seq_length=config.MAX_SEQ_LENGTH,
       dataset_num_proc=2,

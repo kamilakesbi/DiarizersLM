@@ -46,7 +46,11 @@ if __name__ == '__main__':
     parser = HfArgumentParser(DataArguments)
     data_args = parser.parse_args_into_dataclasses()[0]
 
-    dataset = load_dataset(data_args.dataset_name, num_proc=12)
+    dataset = load_dataset(
+        data_args.dataset_name,
+        split=data_args.dataset_split_name,
+        num_proc=data_args.num_proc,
+    )
 
     dataset = dataset.map(
         add_oracle_and_deg_labels, 
@@ -54,4 +58,8 @@ if __name__ == '__main__':
     )
 
     if data_args.push_to_hub:
-        dataset.push_to_hub(data_args.output_hub_repository, private=True)
+        dataset.push_to_hub(
+            data_args.output_hub_repository,
+            split=data_args.dataset_split_name,
+            private=True,
+        )

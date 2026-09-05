@@ -38,6 +38,8 @@ class Processor:
 
             # diarizer output may contain consecutive segments from the same speaker (e.g. {(0 -> 1, speaker_1), (1 -> 1.5, speaker_1), ...})
             # we combine these segments to give overall timestamps for each speaker's turn (e.g. {(0 -> 1.5, speaker_1), ...})
+            if not segments:
+                raise ValueError("The diarization model returned no speaker segments.")
             new_segments = []
             prev_segment = cur_segment = segments[0]
 
@@ -109,7 +111,7 @@ class Processor:
                             current_index = index
                             max_overlap = sentence_segment_overlap
                             
-                    label = str(int(overlap_segments[current_index]['speaker'][-1]) + 1)
+                    label = str(int(overlap_segments[current_index]['speaker'].rsplit("_", 1)[-1]) + 1)
 
                 else:
                     # If no overlap, associate with closest speaker:
@@ -120,9 +122,9 @@ class Processor:
                     gap_start_index = np.argmin(gap_to_start)
 
                     if gap_to_end[gap_end_index] <= gap_to_start[gap_start_index]: 
-                        label = str(int(diarization_segment[gap_end_index]['speaker'][-1]) + 1)
+                        label = str(int(diarization_segment[gap_end_index]['speaker'].rsplit("_", 1)[-1]) + 1)
                     else: 
-                        label = str(int(diarization_segment[gap_start_index]['speaker'][-1]) + 1)
+                        label = str(int(diarization_segment[gap_start_index]['speaker'].rsplit("_", 1)[-1]) + 1)
 
                 nb_words_in_sentence = len(sentence.strip().split())
 
@@ -132,7 +134,7 @@ class Processor:
                 print('Exception!')
                 size = min(len(word_labels), len(transcript_text.strip().split()))
                 word_labels = word_labels[:size]
-                transcript_text = transcript_text[:size]
+                transcript_text = ' '.join(transcript_text.strip().split()[:size])
 
             word_labels = ' '.join(word_labels)
 
@@ -196,28 +198,26 @@ class Processor:
         return oracle_speakers, deg_speakers
     
 
-def add_oracle_and_deg_labels(batch):
+def add_oracle_and_deg_labels(example):
 
     try: 
-        batch['ref_spk_degraded'] = [utils.transcript_preserving_speaker_transfer(
-                        src_text=batch['hyp_text'][0],
-                        src_spk=batch['hyp_spk'][0],
-                        tgt_text=batch['ref_text'][0],
-                        tgt_spk=batch['ref_spk'][0],
-                    )]
-    except: 
-        print('exception')
-        batch['ref_spk_degraded'] = ['']
+        example['ref_spk_degraded'] = utils.transcript_preserving_speaker_transfer(
+                        src_text=example['hyp_text'],
+                        src_spk=example['hyp_spk'],
+                        tgt_text=example['ref_text'],
+                        tgt_spk=example['ref_spk'],
+                    )
+    except (KeyError, ValueError, IndexError) as error:
+        raise ValueError(f"Could not derive degraded labels for {example.get('utterance_id', '<unknown>')}") from error
         
     try: 
-        batch['hyp_spk_oracle'] = [utils.transcript_preserving_speaker_transfer(
-                        src_text=batch['ref_text'][0],
-                        src_spk=batch['ref_spk'][0],
-                        tgt_text=batch['hyp_text'][0],
-                        tgt_spk=batch['hyp_spk'][0],
-                    )]
-    except: 
-        print('exception')
-        batch['hyp_spk_oracle'] = ['']
+        example['hyp_spk_oracle'] = utils.transcript_preserving_speaker_transfer(
+                        src_text=example['ref_text'],
+                        src_spk=example['ref_spk'],
+                        tgt_text=example['hyp_text'],
+                        tgt_spk=example['hyp_spk'],
+                    )
+    except (KeyError, ValueError, IndexError) as error:
+        raise ValueError(f"Could not derive oracle labels for {example.get('utterance_id', '<unknown>')}") from error
 
-    return batch
+    return example
