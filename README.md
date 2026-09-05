@@ -1,7 +1,24 @@
 # DiarizersLM
 
-DiarizersLM combines automatic speech recognition (ASR), speaker diarization,
-and an LLM that corrects speaker assignments in a transcript.
+DiarizersLM is an experimental project inspired by Google's DiarizationLM work.
+It reimplements the diarization-correction pipeline with Whisper for automatic
+speech recognition (ASR), pyannote.audio for speaker diarization, and a
+causal-language model for speaker-assignment correction.
+
+## How it works
+
+The pipeline first uses pyannote.audio to identify speaker turns and their time
+spans. Whisper transcribes the same audio and returns timestamped text chunks.
+The orchestration stage aligns each Whisper chunk with the diarization segment
+having the greatest temporal overlap, producing a transcript paired with an
+initial speaker label for every word. If a chunk has no overlap, it is assigned
+to the nearest diarized turn.
+
+This initial transcript can contain speaker mistakes because ASR and
+diarization boundaries do not always line up. DiarizersLM converts it into
+prompts and sends them to an LLM, which corrects misplaced words and their
+speaker assignments. Finally, the corrected speaker labels are transferred
+back onto the original ASR transcript to produce the diarized output.
 
 ## Status and requirements
 
